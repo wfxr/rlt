@@ -4,9 +4,9 @@ use crate::report::IterReport;
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Counter {
-    pub iters:    u64,
-    pub items:    u64,
-    pub bytes:    u64,
+    pub iters: u64,
+    pub items: u64,
+    pub bytes: u64,
     pub duration: Duration,
 }
 

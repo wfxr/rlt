@@ -3,8 +3,7 @@ use async_trait::async_trait;
 use crossterm::{
     cursor,
     event::{Event, KeyCode, KeyEvent, KeyModifiers},
-    terminal,
-    ExecutableCommand,
+    terminal, ExecutableCommand,
 };
 use itertools::Itertools;
 use ratatui::{
@@ -13,8 +12,7 @@ use ratatui::{
     style::{Color, Style, Stylize},
     text::Line,
     widgets::{block::Title, BarChart, Block, Borders, Clear, Gauge, Padding, Paragraph},
-    CompletedFrame,
-    Frame,
+    CompletedFrame, Frame,
 };
 use std::{collections::HashMap, fmt, io, time::Duration};
 use tokio::{
@@ -35,10 +33,10 @@ use crate::{
 
 pub struct TuiCollector {
     pub bench_opts: BenchOpts,
-    pub fps:        u8,
-    pub res_rx:     mpsc::UnboundedReceiver<Result<IterReport>>,
-    pub pause:      watch::Sender<bool>,
-    pub cancel:     CancellationToken,
+    pub fps: u8,
+    pub res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
+    pub pause: watch::Sender<bool>,
+    pub cancel: CancellationToken,
 }
 
 impl TuiCollector {
@@ -274,10 +272,13 @@ fn render_stats_rate(counter: &Counter, elapsed: Duration) -> Paragraph<'static>
     let lines = vec![
         Line::from(format!("{:.2} iters/s", counter.iters as f64 / secs)),
         Line::from(format!("{:.2} items/s", counter.items as f64 / secs)),
-        Line::from(format!("{}/s", match (counter.bytes as f64 / secs).to_bytes() {
-            Ok(bps) => format!("{:.2}", bps),
-            Err(_) => "NaN B".to_string(),
-        })),
+        Line::from(format!(
+            "{}/s",
+            match (counter.bytes as f64 / secs).to_bytes() {
+                Ok(bps) => format!("{:.2}", bps),
+                Err(_) => "NaN B".to_string(),
+            }
+        )),
     ];
     Paragraph::new(lines).block(Block::new().borders(Borders::NONE))
 }
@@ -450,9 +451,9 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
         return;
     }
     let area = Rect {
-        x:      area.x + area.width - width as u16,
-        y:      area.y,
-        width:  width as u16,
+        x: area.x + area.width - width as u16,
+        y: area.y,
+        width: width as u16,
         height: content.len() as u16,
     };
     let content = content.into_iter().map(Line::from).collect_vec();

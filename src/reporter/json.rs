@@ -13,18 +13,18 @@ impl BenchReporter for JsonReporter {
         let counter = &report.stats.counter;
         let summary = Summary {
             success_ratio: report.success_ratio(),
-            total_time:    elapsed,
-            concurrency:   report.concurrency,
+            total_time: elapsed,
+            concurrency: report.concurrency,
 
             iters: ItersSummary {
-                total:          counter.iters,
-                rate:           counter.iters as f64 / elapsed,
+                total: counter.iters,
+                rate: counter.iters as f64 / elapsed,
                 bytes_per_iter: counter.bytes.checked_div(counter.iters),
             },
 
             items: ItemsSummary {
-                total:          counter.items,
-                rate:           counter.items as f64 / elapsed,
+                total: counter.items,
+                rate: counter.items as f64 / elapsed,
                 items_per_iter: counter.items as f64 / counter.iters as f64,
                 bytes_per_item: counter.bytes.checked_div(counter.items),
             },
@@ -36,19 +36,19 @@ impl BenchReporter for JsonReporter {
             None
         } else {
             Latency {
-                stats:       LatencyStats {
-                    min:    report.hist.min().as_secs_f64(),
-                    max:    report.hist.max().as_secs_f64(),
-                    mean:   report.hist.mean().as_secs_f64(),
+                stats: LatencyStats {
+                    min: report.hist.min().as_secs_f64(),
+                    max: report.hist.max().as_secs_f64(),
+                    mean: report.hist.mean().as_secs_f64(),
                     median: report.hist.median().as_secs_f64(),
-                    stdev:  report.hist.stdev().as_secs_f64(),
+                    stdev: report.hist.stdev().as_secs_f64(),
                 },
                 percentiles: report
                     .hist
                     .percentiles(PERCENTAGES)
                     .map(|(p, v)| (format!("p{p}"), v.as_secs_f64()))
                     .collect(),
-                histogram:   report
+                histogram: report
                     .hist
                     .quantiles()
                     .map(|(k, v)| (k.as_secs_f64().to_string(), v))
@@ -57,12 +57,15 @@ impl BenchReporter for JsonReporter {
             .into()
         };
 
-        serde_json::to_writer_pretty(&mut *w, &Report {
-            summary,
-            latency,
-            status: report.status_dist.iter().map(|(k, &v)| (k.to_string(), v)).collect(),
-            errors: report.error_dist.iter().map(|(k, &v)| (k.clone(), v)).collect(),
-        })?;
+        serde_json::to_writer_pretty(
+            &mut *w,
+            &Report {
+                summary,
+                latency,
+                status: report.status_dist.iter().map(|(k, &v)| (k.to_string(), v)).collect(),
+                errors: report.error_dist.iter().map(|(k, &v)| (k.clone(), v)).collect(),
+            },
+        )?;
 
         writeln!(w)?;
         Ok(())
@@ -72,8 +75,8 @@ impl BenchReporter for JsonReporter {
 #[derive(Serialize)]
 struct Summary {
     success_ratio: f64,
-    total_time:    f64,
-    concurrency:   u32,
+    total_time: f64,
+    concurrency: u32,
 
     iters: ItersSummary,
     items: ItemsSummary,
@@ -82,16 +85,16 @@ struct Summary {
 
 #[derive(Serialize)]
 struct ItersSummary {
-    total:          u64,
-    rate:           f64,
+    total: u64,
+    rate: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     bytes_per_iter: Option<u64>,
 }
 
 #[derive(Serialize)]
 struct ItemsSummary {
-    total:          u64,
-    rate:           f64,
+    total: u64,
+    rate: f64,
     #[serde(skip_serializing_if = "not_normal_f64")]
     items_per_iter: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -101,23 +104,23 @@ struct ItemsSummary {
 #[derive(Serialize)]
 struct BytesSummary {
     total: u64,
-    rate:  f64,
+    rate: f64,
 }
 
 #[derive(Serialize)]
 pub struct LatencyStats {
-    min:    f64,
-    max:    f64,
-    mean:   f64,
+    min: f64,
+    max: f64,
+    mean: f64,
     median: f64,
-    stdev:  f64,
+    stdev: f64,
 }
 
 #[derive(Serialize)]
 pub struct Latency {
-    stats:       LatencyStats,
+    stats: LatencyStats,
     percentiles: BTreeMap<String, f64>,
-    histogram:   BTreeMap<String, u64>,
+    histogram: BTreeMap<String, u64>,
 }
 
 #[derive(Serialize)]
@@ -125,8 +128,8 @@ struct Report {
     summary: Summary,
     #[serde(skip_serializing_if = "Option::is_none")]
     latency: Option<Latency>,
-    status:  BTreeMap<String, u64>,
-    errors:  BTreeMap<String, u64>,
+    status: BTreeMap<String, u64>,
+    errors: BTreeMap<String, u64>,
 }
 
 fn not_normal_f64(v: &f64) -> bool {

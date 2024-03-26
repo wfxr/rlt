@@ -11,7 +11,7 @@ use super::IterStats;
 
 pub struct RotateWindow {
     buckets: VecDeque<IterStats>,
-    size:    usize,
+    size: usize,
 }
 
 impl RotateWindow {
@@ -58,10 +58,10 @@ impl RotateWindow {
 }
 
 pub struct RotateWindowGroup {
-    frame:              Instant,
-    pub stats_by_sec:   RotateWindow,
+    frame: Instant,
+    pub stats_by_sec: RotateWindow,
     pub stats_by_10sec: RotateWindow,
-    pub stats_by_min:   RotateWindow,
+    pub stats_by_min: RotateWindow,
     pub stats_by_10min: RotateWindow,
 }
 
@@ -102,11 +102,11 @@ impl RotateWindowGroup {
 }
 
 pub struct RotateDiffWindowGroup {
-    frame:            Instant,
-    interval:         Duration,
-    stats_last_sec:   RotateWindow,
+    frame: Instant,
+    interval: Duration,
+    stats_last_sec: RotateWindow,
     stats_last_10sec: RotateWindow,
-    stats_last_min:   RotateWindow,
+    stats_last_min: RotateWindow,
     stats_last_10min: RotateWindow,
 }
 

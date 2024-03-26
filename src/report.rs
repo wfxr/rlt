@@ -11,18 +11,18 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct IterReport {
     pub duration: Duration,
-    pub status:   Status,
-    pub bytes:    u64,
-    pub items:    u64,
+    pub status: Status,
+    pub bytes: u64,
+    pub items: u64,
 }
 
 pub struct BenchReport {
     pub concurrency: u32,
-    pub hist:        LatencyHistogram,
-    pub stats:       IterStats,
+    pub hist: LatencyHistogram,
+    pub stats: IterStats,
     pub status_dist: HashMap<Status, u64>,
-    pub error_dist:  HashMap<String, u64>,
-    pub elapsed:     Duration,
+    pub error_dist: HashMap<String, u64>,
+    pub elapsed: Duration,
 }
 
 impl BenchReport {

@@ -20,11 +20,11 @@ use crate::report::IterReport;
 
 #[derive(Copy, Clone, Debug)]
 pub struct BenchOpts {
-    pub start:       Instant,
+    pub start: Instant,
     pub concurrency: u32,
-    pub iterations:  Option<u64>,
-    pub duration:    Option<Duration>,
-    pub rate:        Option<u32>, // iterations per second
+    pub iterations: Option<u64>,
+    pub duration: Option<Duration>,
+    pub rate: Option<u32>, // iterations per second
 }
 
 impl BenchOpts {
@@ -50,17 +50,17 @@ pub struct Runner<BS>
 where
     BS: BenchSuite,
 {
-    suite:   BS,
-    opts:    BenchOpts,
-    res_tx:  mpsc::UnboundedSender<Result<IterReport>>,
-    pause:   watch::Receiver<bool>,
-    cancel:  CancellationToken,
+    suite: BS,
+    opts: BenchOpts,
+    res_tx: mpsc::UnboundedSender<Result<IterReport>>,
+    pause: watch::Receiver<bool>,
+    cancel: CancellationToken,
     counter: Arc<AtomicU64>,
 }
 
 pub struct WorkerState {
-    rng:        StdRng,
-    worker_id:  u32,
+    rng: StdRng,
+    worker_id: u32,
     worker_seq: u64,
     global_seq: u64,
 }

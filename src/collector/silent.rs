@@ -14,8 +14,8 @@ use crate::{
 
 pub struct SilentCollector {
     bench_opts: BenchOpts,
-    res_rx:     UnboundedReceiver<Result<IterReport>>,
-    cancel:     CancellationToken,
+    res_rx: UnboundedReceiver<Result<IterReport>>,
+    cancel: CancellationToken,
 }
 
 impl SilentCollector {
