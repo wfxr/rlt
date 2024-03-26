@@ -182,7 +182,10 @@ where
             loop {
                 let t = timer.tick().await;
                 if b.paused() {
-                    continue;
+                    match b.cancel.is_cancelled() {
+                        false => continue,
+                        true => break,
+                    }
                 }
                 if matches!(endtime, Some(endtime) if t >= endtime) {
                     break;
