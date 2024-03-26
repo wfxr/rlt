@@ -54,7 +54,7 @@ impl BenchSuite for HttpBench {
             s if s.is_success() => Status::success(s.as_u16().into()),
             s if s.is_client_error() => Status::client_error(s.as_u16().into()),
             s if s.is_server_error() => Status::server_error(s.as_u16().into()),
-            s => Status::unknown_error(s.as_u16().into()),
+            s => Status::error(s.as_u16().into()),
         };
 
         let mut bytes = 0;

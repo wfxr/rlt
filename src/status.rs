@@ -2,10 +2,14 @@ use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StatusKind {
+    /// Indicates success status
     Success,
+    /// Indicates uncategorized error
+    Error,
+    /// Indicates client error
     ClientError,
+    /// Indicates server error
     ServerError,
-    UnknownError,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -31,8 +35,8 @@ impl Status {
         Self::new(StatusKind::ServerError, code)
     }
 
-    pub fn unknown_error(code: u32) -> Self {
-        Self::new(StatusKind::UnknownError, code)
+    pub fn error(code: u32) -> Self {
+        Self::new(StatusKind::Error, code)
     }
 
     pub fn kind(&self) -> StatusKind {
@@ -47,10 +51,10 @@ impl Status {
 impl fmt::Display for StatusKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Success => write!(f, "OK"),
-            Self::ClientError => write!(f, "CE"),
-            Self::ServerError => write!(f, "SE"),
-            Self::UnknownError => write!(f, "UE"),
+            Self::Success => write!(f, "Success"),
+            Self::Error => write!(f, "Error"),
+            Self::ClientError => write!(f, "Client Error"),
+            Self::ServerError => write!(f, "Server Error"),
         }
     }
 }

@@ -140,7 +140,7 @@ fn print_status(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
                 StatusKind::Success => line.green(),
                 StatusKind::ClientError => line.yellow(),
                 StatusKind::ServerError => line.red(),
-                StatusKind::UnknownError => line.magenta(),
+                StatusKind::Error => line.magenta(),
             };
             writeln!(w, "{line}")?;
         }

@@ -337,12 +337,12 @@ fn render_status_dist(frame: &mut Frame, area: Rect, status_dist: &HashMap<Statu
         .iter()
         .sorted_by_key(|(_, &cnt)| std::cmp::Reverse(cnt))
         .map(|(status, cnt)| {
-            let s = format!("[{}] {} iters", status, cnt);
+            let s = format!("{} {} iters", status, cnt);
             let s = match status.kind() {
                 StatusKind::Success => s.green(),
                 StatusKind::ClientError => s.yellow(),
                 StatusKind::ServerError => s.red(),
-                StatusKind::UnknownError => s.magenta(),
+                StatusKind::Error => s.magenta(),
             };
             Line::from(s)
         })
