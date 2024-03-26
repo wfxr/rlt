@@ -9,7 +9,7 @@ categories = [
     "development-tools::profiling",
 ]
 edition = "2021"
-keywords = ["cli", "load-testing", "performance", "http"]
+keywords = ["performance", "load-testing", "benchmark", "cli"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/wfxr/rlt"
@@ -39,7 +39,7 @@ itertools = "0.12"
 
 [dev-dependencies]
 tokio = { version = "1.36", features = ["rt-multi-thread"] }
-bytes = "1"
+bytes = "1.6"
 http-body-util = "0.1"
 hyper = { version = "1.2", features = ["client"] }
 hyper-tls = "0.6"
