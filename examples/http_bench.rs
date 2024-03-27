@@ -36,10 +36,6 @@ struct HttpBench {
 impl BenchSuite for HttpBench {
     type RunnerState = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;
 
-    async fn init(&self) -> Result<()> {
-        Ok(())
-    }
-
     async fn state(&self) -> Result<Self::RunnerState> {
         let https = HttpsConnector::new();
         let client = Client::builder(TokioExecutor::new()).build(https);
