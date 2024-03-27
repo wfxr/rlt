@@ -142,10 +142,7 @@ impl ReportCollector for TuiCollector {
 
                         elapsed = t - start;
                         current_tw = if auto_tw && !*self.pause.borrow() {
-                            *TimeWindow::variants()
-                            .iter()
-                            .find(|&&ts| elapsed > ts.into())
-                            .unwrap_or(&TimeWindow::Second)
+                            *TimeWindow::variants().iter().rfind(|&&ts| elapsed > ts.into()).unwrap_or(&TimeWindow::Second)
                         } else {
                             current_tw
                         };
