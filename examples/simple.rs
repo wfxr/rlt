@@ -4,7 +4,7 @@ use clap::Parser;
 use rlt::{
     cli::BenchCli,
     report::IterReport,
-    runner::{BenchSuite, WorkerState},
+    runner::{StatelessBenchSuite, WorkerState},
     status::Status,
 };
 use tokio::time::{Duration, Instant};
@@ -13,13 +13,8 @@ use tokio::time::{Duration, Instant};
 struct FakeBench;
 
 #[async_trait]
-impl BenchSuite for FakeBench {
-    type RunnerState = ();
-    async fn state(&self) -> Result<Self::RunnerState> {
-        Ok(())
-    }
-
-    async fn bench(&mut self, _: &Self::RunnerState, ws: &mut WorkerState) -> Result<IterReport> {
+impl StatelessBenchSuite for FakeBench {
+    async fn bench(&mut self, ws: &mut WorkerState) -> Result<IterReport> {
         let t = Instant::now();
 
         // simulate some work

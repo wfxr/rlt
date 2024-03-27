@@ -45,6 +45,31 @@ pub trait BenchSuite: Clone {
     async fn bench(&mut self, rstate: &Self::RunnerState, wstate: &mut WorkerState) -> Result<IterReport>;
 }
 
+#[async_trait]
+pub trait StatelessBenchSuite {
+    async fn init(&self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn bench(&mut self, wstate: &mut WorkerState) -> Result<IterReport>;
+}
+
+#[async_trait]
+impl<T> BenchSuite for T
+where
+    T: StatelessBenchSuite + Clone + Send + Sync + 'static,
+{
+    type RunnerState = ();
+
+    async fn state(&self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn bench(&mut self, _: &Self::RunnerState, wstate: &mut WorkerState) -> Result<IterReport> {
+        StatelessBenchSuite::bench(self, wstate).await
+    }
+}
+
 #[derive(Clone)]
 pub struct Runner<BS>
 where
