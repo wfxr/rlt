@@ -42,7 +42,7 @@ pub trait BenchSuite: Clone {
     }
 
     async fn state(&self) -> Result<Self::RunnerState>;
-    async fn bench(&mut self, rstate: &Self::RunnerState, wstate: &mut WorkerState) -> Result<IterReport>;
+    async fn bench(&mut self, rstate: &mut Self::RunnerState, wstate: &mut WorkerState) -> Result<IterReport>;
 }
 
 #[async_trait]
@@ -65,7 +65,7 @@ where
         Ok(())
     }
 
-    async fn bench(&mut self, _: &Self::RunnerState, wstate: &mut WorkerState) -> Result<IterReport> {
+    async fn bench(&mut self, _: &mut Self::RunnerState, wstate: &mut WorkerState) -> Result<IterReport> {
         StatelessBenchSuite::bench(self, wstate).await
     }
 }
@@ -131,7 +131,7 @@ where
         Self { suite, opts, res_tx, pause, cancel, counter: Arc::default() }
     }
 
-    async fn iteration(&mut self, rstate: &BS::RunnerState, wstate: &mut WorkerState) {
+    async fn iteration(&mut self, rstate: &mut BS::RunnerState, wstate: &mut WorkerState) {
         self.wait_if_paused().await;
         let res = self.suite.bench(rstate, wstate).await;
         self.res_tx.send(res).expect("send report");
@@ -156,7 +156,7 @@ where
             .map(|worker| {
                 let mut b = self.clone();
                 tokio::spawn(async move {
-                    let rstate = b.suite.state().await?;
+                    let mut rstate = b.suite.state().await?;
                     let mut wstate = WorkerState::new(worker);
                     let cancel = b.cancel.clone();
 
@@ -169,7 +169,7 @@ where
                         }
                         select! {
                             _ = cancel.cancelled() => break,
-                            _ = b.iteration(&rstate, &mut wstate) => (),
+                            _ = b.iteration(&mut rstate, &mut wstate) => (),
                         }
                         wstate.worker_seq += 1;
                     }
@@ -232,7 +232,7 @@ where
                 let rx = rx.clone();
 
                 tokio::spawn(async move {
-                    let rstate = b.suite.state().await?;
+                    let mut rstate = b.suite.state().await?;
                     let mut wstate = WorkerState::new(worker);
                     let cancel = b.cancel.clone();
 
@@ -244,7 +244,7 @@ where
                                     wstate.global_seq = b.counter.fetch_add(1, Ordering::Relaxed);
                                     select! {
                                         _ = cancel.cancelled() => break,
-                                        _ = b.iteration(&rstate, &mut wstate) => (),
+                                        _ = b.iteration(&mut rstate, &mut wstate) => (),
                                     }
                                     wstate.worker_seq += 1;
                                 }
