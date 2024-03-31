@@ -38,13 +38,16 @@ impl std::fmt::Display for TimeUnit {
 
 impl std::fmt::Display for FormattedDuration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let value = self.duration.as_nanos() as f64 / self.unit as u64 as f64;
-        value.fmt(f).and_then(|_| write!(f, "{unit}", unit = self.unit,))
+        self.duration
+            .as_f64(self.unit)
+            .fmt(f)
+            .and_then(|_| write!(f, "{unit}", unit = self.unit,))
     }
 }
 
 pub trait DurationExt {
     fn appropriate_unit(&self) -> TimeUnit;
+    fn as_f64(&self, unit: TimeUnit) -> f64;
 }
 
 impl DurationExt for Duration {
@@ -58,5 +61,9 @@ impl DurationExt for Duration {
             n if n < TimeUnit::Hour as u128 => TimeUnit::Min,
             _ => TimeUnit::Hour,
         }
+    }
+
+    fn as_f64(&self, unit: TimeUnit) -> f64 {
+        self.as_nanos() as f64 / unit as u64 as f64
     }
 }

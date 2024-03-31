@@ -23,7 +23,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     collector::ReportCollector,
-    duration::{DurationExt, FormattedDuration},
+    duration::DurationExt,
     histogram::{LatencyHistogram, PERCENTAGES},
     report::{BenchReport, IterReport},
     runner::BenchOpts,
@@ -258,9 +258,12 @@ fn render_stats(frame: &mut Frame, area: Rect, title: Title, counter: &Counter, 
 
 fn render_stats_counter(counter: &Counter) -> Paragraph<'static> {
     let lines = vec![
-        Line::from(format!("Items: {}", counter.items)),
-        Line::from(format!("Iters: {}", counter.iters)),
-        Line::from(format!("Bytes: {:.2}", counter.bytes.to_bytes())),
+        Line::from(vec!["Items: ".into(), counter.items.to_string().green()]),
+        Line::from(vec!["Iters: ".into(), counter.iters.to_string().green()]),
+        Line::from(vec![
+            "Bytes: ".into(),
+            format!("{:.2}", counter.bytes.adjusted()).green(),
+        ]),
     ];
     Paragraph::new(lines).block(Block::new().borders(Borders::NONE))
 }
@@ -268,15 +271,18 @@ fn render_stats_counter(counter: &Counter) -> Paragraph<'static> {
 fn render_stats_rate(counter: &Counter, elapsed: Duration) -> Paragraph<'static> {
     let secs = elapsed.as_secs_f64();
     let lines = vec![
-        Line::from(format!("{:.2} iters/s", counter.iters as f64 / secs)),
-        Line::from(format!("{:.2} items/s", counter.items as f64 / secs)),
-        Line::from(format!(
-            "{}/s",
-            match (counter.bytes as f64 / secs).to_bytes() {
-                Ok(bps) => format!("{:.2}", bps),
-                Err(_) => "NaN B".to_string(),
-            }
-        )),
+        Line::from(format!("{:.2} iters/s", counter.iters as f64 / secs).green()),
+        Line::from(format!("{:.2} items/s", counter.items as f64 / secs).green()),
+        Line::from(
+            format!(
+                "{}/s",
+                match (counter.bytes as f64 / secs).adjusted() {
+                    Ok(bps) => format!("{:.2}", bps),
+                    Err(_) => "NaN B".to_string(),
+                }
+            )
+            .green(),
+        ),
     ];
     Paragraph::new(lines).block(Block::new().borders(Borders::NONE))
 }
@@ -345,7 +351,7 @@ fn render_status_dist(frame: &mut Frame, area: Rect, status_dist: &HashMap<Statu
             Line::from(s)
         })
         .collect_vec();
-    let p = Paragraph::new(dist).block(Block::new().title(" Status code distribution").borders(Borders::ALL));
+    let p = Paragraph::new(dist).block(Block::new().title(" Status distribution ").borders(Borders::ALL));
     frame.render_widget(p, area);
 }
 
@@ -393,33 +399,37 @@ fn render_iter_hist(frame: &mut Frame, area: Rect, rwg: &RotateWindowGroup, tw: 
         .map(|w| w + 2)
         .unwrap_or(1) as u16;
     let chart = BarChart::default()
-        .block(
-            Block::new()
-                .title(" Iteration histogram ")
-                .style(Style::new().fg(Color::Green).bg(Color::Reset))
-                .borders(Borders::ALL),
-        )
+        .block(Block::new().title(" Iteration histogram ").borders(Borders::ALL))
         .data(bar_num_iter_str.as_slice())
-        .bar_width(bar_width)
-        .to_owned();
+        .bar_style(Style::default().fg(Color::Green))
+        .label_style(Style::default().fg(Color::Cyan))
+        .bar_width(bar_width);
     frame.render_widget(chart, area);
 }
 
 fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, histo_width: usize) {
+    // time unit for the histogram
+    let u = hist.median().appropriate_unit();
+
     let quantiles = hist
         .quantiles()
-        .map(|(l, v)| (l.as_secs_f64().to_string(), v))
+        .map(|(d, n)| (d.as_f64(u).to_string(), n))
         .collect_vec();
 
-    let data: Vec<(&str, u64)> = quantiles.iter().map(|(l, v)| (l.as_str(), *v)).collect();
+    let data: Vec<(&str, u64)> = quantiles.iter().map(|(d, n)| (d.as_str(), *n)).collect();
     let chart = BarChart::default()
         .block(
             Block::new()
-                .title(" Latency histogram")
-                .style(Style::new().fg(Color::Yellow).bg(Color::Reset))
+                .title(Title::from(Line::from(vec![
+                    " Latency histogram (".into(),
+                    u.to_string().yellow().bold(),
+                    ") ".into(),
+                ])))
                 .borders(Borders::ALL),
         )
         .data(&data)
+        .bar_style(Style::default().fg(Color::Green))
+        .label_style(Style::default().fg(Color::Cyan))
         .bar_width(histo_width as u16);
     frame.render_widget(chart, area);
 
@@ -432,24 +442,25 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
     let area = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area[1]);
     let area = area[0];
 
-    // time unit for the histogram
-    let u = hist.median().appropriate_unit();
     // max width of the formatted duration
-    let w = format!("{:.2}", FormattedDuration::from(hist.max(), u)).len() - u.to_string().chars().count() - 1;
+    let w = format!("{:.2}", hist.max().as_f64(u)).len();
+    #[rustfmt::skip]
     let mut content = vec![
-        format!("Max: {: >w$.2}", FormattedDuration::from(hist.max(), u)),
-        format!("Min: {: >w$.2}", FormattedDuration::from(hist.min(), u)),
-        format!("Mean: {: >w$.2}", FormattedDuration::from(hist.mean(), u)),
-        format!("Median: {: >w$.2}", FormattedDuration::from(hist.median(), u)),
-        format!("StdDev: {: >w$.2}", FormattedDuration::from(hist.stdev(), u)),
+        Line::from(vec!["Avg: ".blue(),      format!("{: >w$.2}", hist.mean().as_f64(u)).green()]),
+        Line::from(vec!["Min: ".cyan(),      format!("{: >w$.2}", hist.min().as_f64(u)).green()]),
+        Line::from(vec!["Med: ".yellow(),    format!("{: >w$.2}", hist.median().as_f64(u)).green()]),
+        Line::from(vec!["Max: ".red(),       format!("{: >w$.2}", hist.max().as_f64(u)).green()]),
+        Line::from(vec!["Stdev: ".magenta(), format!("{: >w$.2}", hist.stdev().as_f64(u)).green()]),
     ];
-    content.push("".to_string());
+    content.push(Line::default());
 
-    content.extend(
-        hist.percentiles(PERCENTAGES)
-            .map(|(p, d)| format!("p{:.2}% in {: >w$.2}", p, FormattedDuration::from(d, u))),
-    );
-    let width = content.iter().map(|s| s.len()).max().unwrap_or(0) + 2;
+    content.extend(hist.percentiles(PERCENTAGES).map(|(p, d)| {
+        Line::from(vec![
+            format!("P{:.2}%: ", p).cyan(),
+            format!("{: >w$.2}", d.as_f64(u)).green(),
+        ])
+    }));
+    let width = content.iter().map(|s| s.width()).max().unwrap_or(0) + 2;
     if width > area.width as usize {
         return;
     }
@@ -459,7 +470,6 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
         width: width as u16,
         height: content.len() as u16,
     };
-    let content = content.into_iter().map(Line::from).collect_vec();
     let block = Block::default().padding(Padding::right(2)).borders(Borders::NONE);
     let paragraph = Paragraph::new(content).block(block).right_aligned();
 

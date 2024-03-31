@@ -36,6 +36,7 @@ rand = "0.8"
 async-trait = "0.1"
 hdrhistogram = "7.5"
 itertools = "0.12"
+tabled = "0.15"
 
 [dev-dependencies]
 tokio = { version = "1.36", features = ["rt-multi-thread"] }
