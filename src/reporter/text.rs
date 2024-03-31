@@ -66,7 +66,7 @@ fn print_latency_histogram(
     let &max_count = quantiles.iter().map(|(_, count)| count).max().unwrap();
     let quantiles = quantiles
         .into_iter()
-        .map(|(latency, count)| vec![count.to_string(), latency, "│".into(), render_bar(count, max_count)]);
+        .map(|(latency, count)| vec![count.to_string(), latency, "🭵".into(), render_bar(count, max_count)]);
     let mut quantiles = Builder::from_iter(quantiles).build();
     quantiles
         .with(Style::empty())
