@@ -142,24 +142,6 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> 
     ;
 
     writeln!(w, "{}", stats)?;
-
-    // writeln!(w, "{}", "  Iters".h2())?;
-    // writeln!(w,       "    Total:        {}", format!("{}", counter.iters).green())?;
-    // if counter.iters > 0 {
-    //     writeln!(w,   "    Rate:         {}", format!("{:.2}/s", counter.iters as f64 / elapsed).green())?;
-    //     writeln!(w,   "    Bytes/iter:   {}", format!("{:.2}/s", (counter.bytes as f64 / counter.iters as f64).to_bytes()?).green())?;
-    // }
-    // writeln!(w, "{}", "  Items".h2())?;
-    // writeln!(w,       "    Total:        {}", format!("{}", counter.items).green())?;
-    // if counter.items > 0 {
-    //     writeln!(w,   "    Rate:         {:.2}", counter.items as f64 / elapsed)?;
-    //     writeln!(w,   "    Items/iter:   {:.2}", counter.items as f64 / counter.iters as f64)?;
-    // }
-    // writeln!(w, "{}", "  Bytes".h2())?;
-    // writeln!(w,       "    Total:        {:.2}", counter.bytes.to_bytes())?;
-    // if counter.bytes > 0 {
-    //     writeln!(w,   "    Rate:         {:.2}", (counter.bytes as f64 / elapsed).to_bytes()?)?;
-    // }
     Ok(())
 }
 
@@ -172,6 +154,7 @@ fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram) -> anyhow::Result<(
     // time unit for the histogram
     let u = hist.median().appropriate_unit();
 
+    writeln!(w, "{}", "  Stats".h2())?;
     print_latency_stats(w, hist, u)?;
     writeln!(w)?;
 
@@ -200,7 +183,8 @@ fn print_latency_stats(w: &mut dyn Write, hist: &LatencyHistogram, u: TimeUnit) 
     let mut stats = Builder::from(stats).build();
     stats
         .with(Style::empty())
-        .with(Margin::new(1, 0, 0, 0))
+        .with(Margin::new(2, 0, 0, 0))
+        .with(Padding::new(2, 2, 0, 0))
         .with(Alignment::center())
         .with(Colorization::exact([Color::FG_GREEN], Rows::new(1..=1)))
         .with(Colorization::exact([Color::FG_BLUE], Cell::new(0, 0)))
@@ -223,7 +207,7 @@ fn print_latency_percentiles(w: &mut dyn Write, hist: &LatencyHistogram, u: Time
     let mut percentiles = Builder::from_iter(percentiles).build();
     percentiles
         .with(Style::empty())
-        .with(Margin::new(3, 0, 0, 0))
+        .with(Margin::new(4, 0, 0, 0))
         .with(Alignment::center())
         .with(Padding::zero())
         .with(Colorization::exact([Color::FG_GREEN], FirstColumn))
