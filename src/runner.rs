@@ -164,6 +164,7 @@ where
                         wstate.global_seq = b.counter.fetch_add(1, Ordering::Relaxed);
                         if let Some(iterations) = iterations {
                             if wstate.global_seq >= iterations {
+                                cancel.cancel();
                                 break;
                             }
                         }
