@@ -11,7 +11,7 @@ use std::{
 use tokio::{
     select,
     sync::{mpsc, watch},
-    task::JoinHandle,
+    task::JoinSet,
     time::{sleep_until, Instant, MissedTickBehavior},
 };
 use tokio_util::sync::CancellationToken;
@@ -152,42 +152,40 @@ where
         let iterations = self.opts.iterations;
         let endtime = self.opts.endtime();
 
-        let futures: Vec<JoinHandle<Result<()>>> = (0..concurrency)
-            .map(|worker| {
-                let mut b = self.clone();
-                tokio::spawn(async move {
-                    let mut rstate = b.suite.state().await?;
-                    let mut wstate = WorkerState::new(worker);
-                    let cancel = b.cancel.clone();
+        let mut set: JoinSet<Result<()>> = JoinSet::new();
+        for worker in 0..concurrency {
+            let mut b = self.clone();
+            set.spawn(async move {
+                let mut rstate = b.suite.state().await?;
+                let mut wstate = WorkerState::new(worker);
+                let cancel = b.cancel.clone();
 
-                    loop {
-                        wstate.global_seq = b.counter.fetch_add(1, Ordering::Relaxed);
-                        if let Some(iterations) = iterations {
-                            if wstate.global_seq >= iterations {
-                                cancel.cancel();
-                                break;
-                            }
+                loop {
+                    wstate.global_seq = b.counter.fetch_add(1, Ordering::Relaxed);
+                    if let Some(iterations) = iterations {
+                        if wstate.global_seq >= iterations {
+                            break;
                         }
-                        select! {
-                            _ = cancel.cancelled() => break,
-                            _ = b.iteration(&mut rstate, &mut wstate) => (),
-                        }
-                        wstate.worker_seq += 1;
                     }
-                    Ok(())
-                })
-            })
-            .collect();
-
-        if let Some(endtime) = endtime {
-            select! {
-                _ = self.cancel.cancelled() => (),
-                _ = sleep_until(endtime) => self.cancel.cancel(),
-            }
+                    select! {
+                        _ = cancel.cancelled() => break,
+                        _ = b.iteration(&mut rstate, &mut wstate) => (),
+                    }
+                    wstate.worker_seq += 1;
+                }
+                Ok(())
+            });
         }
 
-        for f in futures {
-            f.await??;
+        match endtime {
+            Some(t) => {
+                select! {
+                    _ = self.cancel.cancelled() => (),
+                    _ = sleep_until(t) => self.cancel.cancel(),
+                    r = join_all(set) => r?,
+                }
+            }
+            None => join_all(set).await?,
         }
 
         Ok(())
@@ -227,42 +225,36 @@ where
             }
         });
 
-        let futures: Vec<JoinHandle<Result<()>>> = (0..concurrency)
-            .map(|worker| {
-                let mut b = self.clone();
-                let rx = rx.clone();
+        let mut set: JoinSet<Result<()>> = JoinSet::new();
+        for worker in 0..concurrency {
+            let mut b = self.clone();
+            let rx = rx.clone();
+            set.spawn(async move {
+                let mut rstate = b.suite.state().await?;
+                let mut wstate = WorkerState::new(worker);
+                let cancel = b.cancel.clone();
 
-                tokio::spawn(async move {
-                    let mut rstate = b.suite.state().await?;
-                    let mut wstate = WorkerState::new(worker);
-                    let cancel = b.cancel.clone();
-
-                    loop {
-                        select! {
-                            _ = cancel.cancelled() => break,
-                            t = rx.recv_async() => match t {
-                                Ok(_) => {
-                                    wstate.global_seq = b.counter.fetch_add(1, Ordering::Relaxed);
-                                    select! {
-                                        _ = cancel.cancelled() => break,
-                                        _ = b.iteration(&mut rstate, &mut wstate) => (),
-                                    }
-                                    wstate.worker_seq += 1;
+                loop {
+                    select! {
+                        _ = cancel.cancelled() => break,
+                        t = rx.recv_async() => match t {
+                            Ok(_) => {
+                                wstate.global_seq = b.counter.fetch_add(1, Ordering::Relaxed);
+                                select! {
+                                    _ = cancel.cancelled() => break,
+                                    _ = b.iteration(&mut rstate, &mut wstate) => (),
                                 }
-                                Err(_) => break,
+                                wstate.worker_seq += 1;
                             }
+                            Err(_) => break,
                         }
                     }
-                    Ok(())
-                })
-            })
-            .collect();
-
-        for f in futures {
-            f.await??;
+                }
+                Ok(())
+            });
         }
 
-        Ok(())
+        join_all(set).await
     }
 
     fn paused(&self) -> bool {
@@ -276,4 +268,11 @@ where
             }
         }
     }
+}
+
+async fn join_all(mut set: JoinSet<Result<()>>) -> Result<()> {
+    while let Some(res) = set.join_next().await {
+        res??;
+    }
+    Ok(())
 }
