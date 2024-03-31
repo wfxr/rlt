@@ -1,3 +1,4 @@
+mod duration;
 mod stats;
 mod util;
 

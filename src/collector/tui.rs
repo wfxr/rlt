@@ -23,6 +23,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     collector::ReportCollector,
+    duration::{DurationExt, FormattedDuration},
     histogram::{LatencyHistogram, PERCENTAGES},
     report::{BenchReport, IterReport},
     runner::BenchOpts,
@@ -431,17 +432,22 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
     let area = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area[1]);
     let area = area[0];
 
+    // time unit for the histogram
+    let u = hist.median().appropriate_unit();
+    // max width of the formatted duration
+    let w = format!("{:.2}", FormattedDuration::from(hist.max(), u)).len() - u.to_string().chars().count() - 1;
     let mut content = vec![
-        format!("Max: {:.4}s", hist.max().as_secs_f64()),
-        format!("Min: {:.4}s", hist.min().as_secs_f64()),
-        format!("Mean: {:.4}s", hist.mean().as_secs_f64()),
-        format!("Median: {:.4}s", hist.median().as_secs_f64()),
-        format!("StdDev: {:.4}s", hist.stdev().as_secs_f64()),
+        format!("Max: {: >w$.2}", FormattedDuration::from(hist.max(), u)),
+        format!("Min: {: >w$.2}", FormattedDuration::from(hist.min(), u)),
+        format!("Mean: {: >w$.2}", FormattedDuration::from(hist.mean(), u)),
+        format!("Median: {: >w$.2}", FormattedDuration::from(hist.median(), u)),
+        format!("StdDev: {: >w$.2}", FormattedDuration::from(hist.stdev(), u)),
     ];
     content.push("".to_string());
+
     content.extend(
         hist.percentiles(PERCENTAGES)
-            .map(|(p, v)| format!("p{:.2}% in {:.4}s", p, v.as_secs_f64())),
+            .map(|(p, d)| format!("p{:.2}% in {: >w$.2}", p, FormattedDuration::from(d, u))),
     );
     let width = content.iter().map(|s| s.len()).max().unwrap_or(0) + 2;
     if width > area.width as usize {
