@@ -1,7 +1,7 @@
 use crossterm::style::{StyledContent, Stylize};
 use itertools::Itertools;
 use std::{cmp::Reverse, collections::HashMap, io::Write};
-use tabled::settings::object::{Cell, Columns, FirstColumn, LastColumn, Object, Rows};
+use tabled::settings::object::{Cell, Columns, FirstColumn, FirstRow, LastColumn, Object, Rows};
 use tabled::settings::Padding;
 use tabled::{
     builder::Builder,
@@ -108,9 +108,10 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> 
     let counter = &report.stats.counter;
 
     writeln!(w, "{}", "Summary".h1())?;
-    writeln!(w,       "  Time:          {}", format!("{:.2}s", elapsed).green().bold())?;
-    writeln!(w,       "  Concurrency:   {}", format!("{}", report.concurrency).green().bold())?;
-    writeln!(w,       "  Success ratio: {}", render_success_ratio(100.0 * report.success_ratio()))?;
+    writeln!(w, "  Benchmark took {} with concurrency {} ({} success)",
+                        format!("{:.2}s", elapsed).yellow().bold(),
+                        format!("{}", report.concurrency).cyan().bold(),
+                        render_success_ratio(100.0 * report.success_ratio()))?;
     writeln!(w)?;
 
     let stats = vec![
@@ -134,11 +135,12 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> 
     let mut stats = Builder::from(stats).build();
     stats
         .with(Style::empty())
-        .with(Alignment::center())
+        .with(Alignment::right())
         .with(Padding::new(2, 2, 0, 0))
         .with(Colorization::exact([Color::BOLD], Cell::new(0, 1)))
         .with(Colorization::exact([Color::BOLD], Cell::new(0, 2)))
         .with(Colorization::exact([Color::FG_GREEN], Rows::new(1..=4).not(Columns::new(0..=0))))
+        .modify(FirstRow, Alignment::center())
     ;
 
     writeln!(w, "{}", stats)?;
@@ -164,7 +166,6 @@ fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram) -> anyhow::Result<(
 
     writeln!(w, "{}", "  Histogram".h2())?;
     print_latency_histogram(w, hist, u, 2)?;
-    writeln!(w)?;
 
     Ok(())
 }
