@@ -1200,7 +1200,6 @@ dependencies = [
  "hyper-tls",
  "hyper-util",
  "itertools",
- "rand",
  "ratatui",
  "serde",
  "serde_json",

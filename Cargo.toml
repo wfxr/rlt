@@ -32,7 +32,6 @@ tokio-util = "0.7"
 ratatui = { version = "0.26", features = [
     "crossterm",
 ], default-features = false }
-rand = "0.8"
 async-trait = "0.1"
 hdrhistogram = "7.5"
 itertools = "0.12"

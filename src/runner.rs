@@ -1,6 +1,5 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use rand::prelude::*;
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -39,7 +38,7 @@ pub trait BenchSuite: Clone {
 
     async fn state(&self, worker_id: u32) -> Result<Self::WorkerState>;
 
-    async fn bench(&mut self, state: &mut Self::WorkerState, info: &mut WorkerInfo) -> Result<IterReport>;
+    async fn bench(&mut self, state: &mut Self::WorkerState, info: &WorkerInfo) -> Result<IterReport>;
 
     #[allow(unused_variables)]
     async fn setup(&mut self, state: &mut Self::WorkerState, worker_id: u32) -> Result<()> {
@@ -54,7 +53,7 @@ pub trait BenchSuite: Clone {
 
 #[async_trait]
 pub trait StatelessBenchSuite {
-    async fn bench(&mut self, info: &mut WorkerInfo) -> Result<IterReport>;
+    async fn bench(&mut self, info: &WorkerInfo) -> Result<IterReport>;
 }
 
 #[async_trait]
@@ -68,7 +67,7 @@ where
         Ok(())
     }
 
-    async fn bench(&mut self, _: &mut Self::WorkerState, info: &mut WorkerInfo) -> Result<IterReport> {
+    async fn bench(&mut self, _: &mut Self::WorkerState, info: &WorkerInfo) -> Result<IterReport> {
         StatelessBenchSuite::bench(self, info).await
     }
 }
@@ -87,35 +86,14 @@ where
 }
 
 pub struct WorkerInfo {
-    rng: StdRng,
-    worker_id: u32,
-    worker_seq: u64,
-    runner_seq: u64,
+    pub worker_id: u32,
+    pub worker_seq: u64,
+    pub runner_seq: u64,
 }
 
 impl WorkerInfo {
     pub fn new(worker_id: u32) -> Self {
-        Self {
-            rng: StdRng::from_entropy(),
-            worker_id,
-            worker_seq: 0,
-            runner_seq: 0,
-        }
-    }
-    pub fn runner_seq(&self) -> u64 {
-        self.runner_seq
-    }
-
-    pub fn worker_seq(&self) -> u64 {
-        self.worker_seq
-    }
-
-    pub fn worker_id(&self) -> u32 {
-        self.worker_id
-    }
-
-    pub fn rng(&mut self) -> &mut StdRng {
-        &mut self.rng
+        Self { worker_id, worker_seq: 0, runner_seq: 0 }
     }
 }
 
@@ -134,7 +112,7 @@ where
         Self { suite, opts, res_tx, pause, cancel, seq: Arc::default() }
     }
 
-    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &mut WorkerInfo) {
+    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &WorkerInfo) {
         self.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
         self.res_tx.send(res).expect("send report");
@@ -171,7 +149,7 @@ where
                     }
                     select! {
                         _ = cancel.cancelled() => break,
-                        _ = b.iteration(&mut state, &mut info) => (),
+                        _ = b.iteration(&mut state, &info) => (),
                     }
                     info.worker_seq += 1;
                 }
@@ -244,7 +222,7 @@ where
                                 info.runner_seq = b.seq.fetch_add(1, Ordering::Relaxed);
                                 select! {
                                     _ = cancel.cancelled() => break,
-                                    _ = b.iteration(&mut state, &mut info) => (),
+                                    _ = b.iteration(&mut state, &info) => (),
                                 }
                                 info.worker_seq += 1;
                             }
