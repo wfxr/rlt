@@ -35,14 +35,14 @@ impl BenchOpts {
 
 #[async_trait]
 pub trait BenchSuite: Clone {
-    type RunnerState;
+    type WorkerState;
 
     async fn init(&self) -> Result<()> {
         Ok(())
     }
 
-    async fn state(&self) -> Result<Self::RunnerState>;
-    async fn bench(&mut self, rstate: &mut Self::RunnerState, wstate: &mut WorkerState) -> Result<IterReport>;
+    async fn state(&self) -> Result<Self::WorkerState>;
+    async fn bench(&mut self, state: &mut Self::WorkerState, info: &mut WorkerInfo) -> Result<IterReport>;
 }
 
 #[async_trait]
@@ -51,7 +51,7 @@ pub trait StatelessBenchSuite {
         Ok(())
     }
 
-    async fn bench(&mut self, wstate: &mut WorkerState) -> Result<IterReport>;
+    async fn bench(&mut self, info: &mut WorkerInfo) -> Result<IterReport>;
 }
 
 #[async_trait]
@@ -59,14 +59,14 @@ impl<T> BenchSuite for T
 where
     T: StatelessBenchSuite + Clone + Send + Sync + 'static,
 {
-    type RunnerState = ();
+    type WorkerState = ();
 
     async fn state(&self) -> Result<()> {
         Ok(())
     }
 
-    async fn bench(&mut self, _: &mut Self::RunnerState, wstate: &mut WorkerState) -> Result<IterReport> {
-        StatelessBenchSuite::bench(self, wstate).await
+    async fn bench(&mut self, _: &mut Self::WorkerState, info: &mut WorkerInfo) -> Result<IterReport> {
+        StatelessBenchSuite::bench(self, info).await
     }
 }
 
@@ -80,27 +80,27 @@ where
     res_tx: mpsc::UnboundedSender<Result<IterReport>>,
     pause: watch::Receiver<bool>,
     cancel: CancellationToken,
-    counter: Arc<AtomicU64>,
+    seq: Arc<AtomicU64>,
 }
 
-pub struct WorkerState {
+pub struct WorkerInfo {
     rng: StdRng,
     worker_id: u32,
     worker_seq: u64,
-    global_seq: u64,
+    runner_seq: u64,
 }
 
-impl WorkerState {
+impl WorkerInfo {
     pub fn new(worker_id: u32) -> Self {
         Self {
             rng: StdRng::from_entropy(),
             worker_id,
             worker_seq: 0,
-            global_seq: 0,
+            runner_seq: 0,
         }
     }
-    pub fn global_seq(&self) -> u64 {
-        self.global_seq
+    pub fn runner_seq(&self) -> u64 {
+        self.runner_seq
     }
 
     pub fn worker_seq(&self) -> u64 {
@@ -119,7 +119,7 @@ impl WorkerState {
 impl<BS> Runner<BS>
 where
     BS: BenchSuite + Send + Sync + 'static,
-    BS::RunnerState: Send + Sync + 'static,
+    BS::WorkerState: Send + Sync + 'static,
 {
     pub fn new(
         suite: BS,
@@ -128,12 +128,12 @@ where
         pause: watch::Receiver<bool>,
         cancel: CancellationToken,
     ) -> Self {
-        Self { suite, opts, res_tx, pause, cancel, counter: Arc::default() }
+        Self { suite, opts, res_tx, pause, cancel, seq: Arc::default() }
     }
 
-    async fn iteration(&mut self, rstate: &mut BS::RunnerState, wstate: &mut WorkerState) {
+    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &mut WorkerInfo) {
         self.wait_if_paused().await;
-        let res = self.suite.bench(rstate, wstate).await;
+        let res = self.suite.bench(state, info).await;
         self.res_tx.send(res).expect("send report");
     }
 
@@ -156,22 +156,22 @@ where
         for worker in 0..concurrency {
             let mut b = self.clone();
             set.spawn(async move {
-                let mut rstate = b.suite.state().await?;
-                let mut wstate = WorkerState::new(worker);
+                let mut state = b.suite.state().await?;
+                let mut info = WorkerInfo::new(worker);
                 let cancel = b.cancel.clone();
 
                 loop {
-                    wstate.global_seq = b.counter.fetch_add(1, Ordering::Relaxed);
+                    info.runner_seq = b.seq.fetch_add(1, Ordering::Relaxed);
                     if let Some(iterations) = iterations {
-                        if wstate.global_seq >= iterations {
+                        if info.runner_seq >= iterations {
                             break;
                         }
                     }
                     select! {
                         _ = cancel.cancelled() => break,
-                        _ = b.iteration(&mut rstate, &mut wstate) => (),
+                        _ = b.iteration(&mut state, &mut info) => (),
                     }
-                    wstate.worker_seq += 1;
+                    info.worker_seq += 1;
                 }
                 Ok(())
             });
@@ -230,8 +230,8 @@ where
             let mut b = self.clone();
             let rx = rx.clone();
             set.spawn(async move {
-                let mut rstate = b.suite.state().await?;
-                let mut wstate = WorkerState::new(worker);
+                let mut state = b.suite.state().await?;
+                let mut info = WorkerInfo::new(worker);
                 let cancel = b.cancel.clone();
 
                 loop {
@@ -239,12 +239,12 @@ where
                         _ = cancel.cancelled() => break,
                         t = rx.recv_async() => match t {
                             Ok(_) => {
-                                wstate.global_seq = b.counter.fetch_add(1, Ordering::Relaxed);
+                                info.runner_seq = b.seq.fetch_add(1, Ordering::Relaxed);
                                 select! {
                                     _ = cancel.cancelled() => break,
-                                    _ = b.iteration(&mut rstate, &mut wstate) => (),
+                                    _ = b.iteration(&mut state, &mut info) => (),
                                 }
-                                wstate.worker_seq += 1;
+                                info.worker_seq += 1;
                             }
                             Err(_) => break,
                         }

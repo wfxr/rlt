@@ -12,7 +12,7 @@ use hyper_util::{
 use rlt::{
     cli::BenchCli,
     report::IterReport,
-    runner::{BenchSuite, WorkerState},
+    runner::{BenchSuite, WorkerInfo},
     status::Status,
 };
 use tokio::time::Instant;
@@ -34,15 +34,15 @@ struct HttpBench {
 
 #[async_trait]
 impl BenchSuite for HttpBench {
-    type RunnerState = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;
+    type WorkerState = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;
 
-    async fn state(&self) -> Result<Self::RunnerState> {
+    async fn state(&self) -> Result<Self::WorkerState> {
         let https = HttpsConnector::new();
         let client = Client::builder(TokioExecutor::new()).build(https);
         Ok(client)
     }
 
-    async fn bench(&mut self, client: &mut Self::RunnerState, _: &mut WorkerState) -> Result<IterReport> {
+    async fn bench(&mut self, client: &mut Self::WorkerState, _: &mut WorkerInfo) -> Result<IterReport> {
         let t = Instant::now();
         let mut resp = client.get(self.url.clone()).await?;
 

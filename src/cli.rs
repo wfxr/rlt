@@ -94,7 +94,7 @@ pub enum ReportFormat {
 pub async fn run<BS>(cli: &BenchCli, bench_suite: BS) -> anyhow::Result<()>
 where
     BS: BenchSuite + Send + Sync + 'static,
-    BS::RunnerState: Send + Sync + 'static,
+    BS::WorkerState: Send + Sync + 'static,
 {
     let (res_tx, res_rx) = mpsc::unbounded_channel();
     let (pause_tx, pause_rx) = watch::channel(false);
