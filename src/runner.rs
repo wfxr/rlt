@@ -181,18 +181,15 @@ where
             });
         }
 
-        match endtime {
-            Some(t) => {
-                select! {
-                    _ = self.cancel.cancelled() => (),
-                    _ = sleep_until(t) => self.cancel.cancel(),
-                    r = join_all(set) => r?,
-                }
+        if let Some(t) = endtime {
+            select! {
+                _ = self.cancel.cancelled() => (),
+                _ = sleep_until(t) => self.cancel.cancel(),
+                _ = join_all(&mut set) => (),
             }
-            None => join_all(set).await?,
-        }
+        };
 
-        Ok(())
+        join_all(&mut set).await
     }
 
     /// Run the benchmark with a rate limit.
@@ -261,7 +258,7 @@ where
             });
         }
 
-        join_all(set).await
+        join_all(&mut set).await
     }
 
     fn paused(&self) -> bool {
@@ -277,7 +274,7 @@ where
     }
 }
 
-async fn join_all(mut set: JoinSet<Result<()>>) -> Result<()> {
+async fn join_all(set: &mut JoinSet<Result<()>>) -> Result<()> {
     while let Some(res) = set.join_next().await {
         res??;
     }
