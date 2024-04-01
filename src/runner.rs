@@ -37,20 +37,12 @@ impl BenchOpts {
 pub trait BenchSuite: Clone {
     type WorkerState;
 
-    async fn init(&self) -> Result<()> {
-        Ok(())
-    }
-
     async fn state(&self) -> Result<Self::WorkerState>;
     async fn bench(&mut self, state: &mut Self::WorkerState, info: &mut WorkerInfo) -> Result<IterReport>;
 }
 
 #[async_trait]
 pub trait StatelessBenchSuite {
-    async fn init(&self) -> Result<()> {
-        Ok(())
-    }
-
     async fn bench(&mut self, info: &mut WorkerInfo) -> Result<IterReport>;
 }
 
@@ -138,8 +130,6 @@ where
     }
 
     pub async fn run(self) -> Result<()> {
-        self.suite.init().await?;
-
         match self.opts.rate {
             None => self.bench().await,
             Some(r) => self.bench_with_rate(r).await,
