@@ -38,7 +38,18 @@ pub trait BenchSuite: Clone {
     type WorkerState;
 
     async fn state(&self, worker_id: u32) -> Result<Self::WorkerState>;
+
     async fn bench(&mut self, state: &mut Self::WorkerState, info: &mut WorkerInfo) -> Result<IterReport>;
+
+    #[allow(unused_variables)]
+    async fn setup(&mut self, state: &mut Self::WorkerState, worker_id: u32) -> Result<()> {
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn teardown(&mut self, state: &mut Self::WorkerState, info: &mut WorkerInfo) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -150,6 +161,7 @@ where
                 let mut info = WorkerInfo::new(worker);
                 let cancel = b.cancel.clone();
 
+                b.suite.setup(&mut state, worker).await?;
                 loop {
                     info.runner_seq = b.seq.fetch_add(1, Ordering::Relaxed);
                     if let Some(iterations) = iterations {
@@ -163,6 +175,8 @@ where
                     }
                     info.worker_seq += 1;
                 }
+                b.suite.teardown(&mut state, &mut info).await?;
+
                 Ok(())
             });
         }
@@ -224,6 +238,7 @@ where
                 let mut info = WorkerInfo::new(worker);
                 let cancel = b.cancel.clone();
 
+                b.suite.setup(&mut state, worker).await?;
                 loop {
                     select! {
                         _ = cancel.cancelled() => break,
@@ -240,6 +255,8 @@ where
                         }
                     }
                 }
+                b.suite.teardown(&mut state, &mut info).await?;
+
                 Ok(())
             });
         }
