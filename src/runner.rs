@@ -37,7 +37,7 @@ impl BenchOpts {
 pub trait BenchSuite: Clone {
     type WorkerState;
 
-    async fn state(&self) -> Result<Self::WorkerState>;
+    async fn state(&self, worker_id: u32) -> Result<Self::WorkerState>;
     async fn bench(&mut self, state: &mut Self::WorkerState, info: &mut WorkerInfo) -> Result<IterReport>;
 }
 
@@ -53,7 +53,7 @@ where
 {
     type WorkerState = ();
 
-    async fn state(&self) -> Result<()> {
+    async fn state(&self, _: u32) -> Result<()> {
         Ok(())
     }
 
@@ -146,7 +146,7 @@ where
         for worker in 0..concurrency {
             let mut b = self.clone();
             set.spawn(async move {
-                let mut state = b.suite.state().await?;
+                let mut state = b.suite.state(worker).await?;
                 let mut info = WorkerInfo::new(worker);
                 let cancel = b.cancel.clone();
 
@@ -220,7 +220,7 @@ where
             let mut b = self.clone();
             let rx = rx.clone();
             set.spawn(async move {
-                let mut state = b.suite.state().await?;
+                let mut state = b.suite.state(worker).await?;
                 let mut info = WorkerInfo::new(worker);
                 let cancel = b.cancel.clone();
 
