@@ -34,7 +34,7 @@ impl BenchOpts {
 
 #[async_trait]
 pub trait BenchSuite: Clone {
-    type WorkerState;
+    type WorkerState: Send;
 
     async fn state(&self, worker_id: u32) -> Result<Self::WorkerState>;
 
@@ -46,7 +46,7 @@ pub trait BenchSuite: Clone {
     }
 
     #[allow(unused_variables)]
-    async fn teardown(&mut self, state: &mut Self::WorkerState, info: &mut WorkerInfo) -> Result<()> {
+    async fn teardown(self, state: Self::WorkerState, info: WorkerInfo) -> Result<()> {
         Ok(())
     }
 }
@@ -153,7 +153,7 @@ where
                     }
                     info.worker_seq += 1;
                 }
-                b.suite.teardown(&mut state, &mut info).await?;
+                b.suite.teardown(state, info).await?;
 
                 Ok(())
             });
@@ -230,7 +230,7 @@ where
                         }
                     }
                 }
-                b.suite.teardown(&mut state, &mut info).await?;
+                b.suite.teardown(state, info).await?;
 
                 Ok(())
             });
