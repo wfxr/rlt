@@ -1,3 +1,85 @@
+//! CLI module for the benchmarking tool.
+//!
+//! Usually you can embed [`BenchCli`] into your own CLI struct.
+//!
+//! # Examples
+//!
+//! ```rust
+//! use clap::Parser;
+//! use rlt::cli::BenchCli;
+//!
+//! #[derive(Parser, Clone)]
+//! pub struct Opts {
+//!     /// Target URL.
+//!     pub url: String,
+//!
+//!     /// Embed BenchOpts into this Opts.
+//!     #[command(flatten)]
+//!     pub bench_opts: BenchCli,
+//! }
+//! ```
+//! The above example will generate a CLI struct with `url` and all the options
+//! from `BenchCli`:
+//!
+//! ```shell
+//! $ mybench --help
+//! Usage: mybench [OPTIONS] <URL>
+//!
+//! Arguments:
+//!   <URL>
+//!           Target URL
+//!
+//! Options:
+//!   -c, --concurrency <CONCURRENCY>
+//!           Number of workers to run concurrently
+//!
+//!           [default: 1]
+//!
+//!   -n, --iterations <ITERATIONS>
+//!           Number of iterations
+//!
+//!           When set, benchmark stops after reaching the number of iterations.
+//!
+//!   -d, --duration <DURATION>
+//!           Duration to run the benchmark
+//!
+//!           When set, benchmark stops after reaching the duration.
+//!
+//!           Examples: -z 10s, -z 5m, -z 1h
+//!
+//!   -r, --rate <RATE>
+//!           Rate limit for benchmarking, in iterations per second (ips)
+//!
+//!           When set, benchmark will try to run at the specified rate.
+//!
+//!   -q, --quiet
+//!           Run benchmark in quiet mode
+//!
+//!           Implies --collector silent.
+//!
+//!       --collector <COLLECTOR>
+//!           Collector for the benchmark
+//!
+//!           Possible values:
+//!           - tui:    TUI based collector
+//!           - silent: Collector that does not print anything
+//!
+//!       --fps <FPS>
+//!           Refresh rate for the tui collector, in frames per second (fps)
+//!
+//!           [default: 32]
+//!
+//!   -o, --output <OUTPUT>
+//!           Output format for the report
+//!
+//!           [default: text]
+//!
+//!           Possible values:
+//!           - text: Report in plain text format
+//!           - json: Report in JSON format
+//!
+//!   -h, --help
+//!           Print help (see a summary with '-h')
 use std::io::stdout;
 
 use clap::{Parser, ValueEnum};
@@ -15,6 +97,7 @@ use crate::{
 };
 
 #[derive(Parser, Clone)]
+#[allow(missing_docs)]
 pub struct BenchCli {
     /// Number of workers to run concurrently
     #[clap(long, short = 'c', default_value = "1", value_parser = clap::value_parser!(u32).range(1..))]
@@ -60,7 +143,7 @@ pub struct BenchCli {
 }
 
 impl BenchCli {
-    pub fn bench_opts(&self, start: Instant) -> BenchOpts {
+    pub(crate) fn bench_opts(&self, start: Instant) -> BenchOpts {
         BenchOpts {
             start,
             concurrency: self.concurrency,
@@ -70,7 +153,7 @@ impl BenchCli {
         }
     }
 
-    pub fn collector(&self) -> Collector {
+    pub(crate) fn collector(&self) -> Collector {
         match self.collector {
             Some(collector) => collector,
             None if self.quiet || !stdout().is_tty() => Collector::Silent,
@@ -79,18 +162,27 @@ impl BenchCli {
     }
 }
 
+/// The type of iteration report collector.
 #[derive(Copy, Clone, ValueEnum)]
 pub enum Collector {
+    /// TUI based collector. See [`TuiCollector`].
     Tui,
+
+    /// Collector that does not print anything. See [`SilentCollector`].
     Silent,
 }
 
+/// Benchmark report format.
 #[derive(Copy, Clone, ValueEnum)]
 pub enum ReportFormat {
+    /// Report in plain text format. See [`TextReporter`].
     Text,
+
+    /// Report in JSON format. See [`JsonReporter`].
     Json,
 }
 
+/// Run the benchmark with the given CLI options and benchmark suite.
 pub async fn run<BS>(cli: &BenchCli, bench_suite: BS) -> anyhow::Result<()>
 where
     BS: BenchSuite + Send + Sync + 'static,
