@@ -23,17 +23,19 @@ pub struct TextReporter;
 impl super::BenchReporter for TextReporter {
     fn print(&self, w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
         print_summary(w, report)?;
-        writeln!(w)?;
 
         if report.stats.counter.iters > 0 {
+            writeln!(w)?;
             print_latency(w, &report.hist)?;
-            writeln!(w)?;
 
-            print_status(w, &report.status_dist)?;
             writeln!(w)?;
+            print_status(w, &report.status_dist)?;
         }
 
-        print_error(w, report)?;
+        if !report.error_dist.is_empty() {
+            writeln!(w)?;
+            print_error(w, report)?;
+        }
 
         Ok(())
     }
@@ -249,13 +251,11 @@ fn print_error(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
         .iter()
         .sorted_unstable_by_key(|(_, &cnt)| Reverse(cnt))
         .collect_vec();
-    if !error_v.is_empty() {
-        let max = error_v.iter().map(|(_, iters)| iters).max().unwrap();
-        let iters_width = max.to_string().len();
-        writeln!(w, "{}", "Error distribution".h1())?;
-        for (error, count) in error_v {
-            writeln!(w, "{}", format!("  [{count:>iters_width$}] {error}").red())?;
-        }
+    let max = error_v.iter().map(|(_, iters)| iters).max().unwrap();
+    let iters_width = max.to_string().len();
+    writeln!(w, "{}", "Error distribution".h1())?;
+    for (error, count) in error_v {
+        writeln!(w, "{}", format!("  [{count:>iters_width$}] {error}").red())?;
     }
     Ok(())
 }
