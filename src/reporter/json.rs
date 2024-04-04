@@ -5,6 +5,7 @@ use super::BenchReporter;
 use serde::Serialize;
 use std::{collections::BTreeMap, io::Write};
 
+/// A JSON reporter for benchmark results.
 pub struct JsonReporter;
 
 impl BenchReporter for JsonReporter {

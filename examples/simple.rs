@@ -3,18 +3,16 @@ use async_trait::async_trait;
 use clap::Parser;
 use rlt::{
     cli::BenchCli,
-    report::IterReport,
-    runner::{StatelessBenchSuite, WorkerInfo},
-    status::Status,
+    IterReport, Status, {IterInfo, StatelessBenchSuite},
 };
 use tokio::time::{Duration, Instant};
 
 #[derive(Clone)]
-struct FakeBench;
+struct SimpleBench;
 
 #[async_trait]
-impl StatelessBenchSuite for FakeBench {
-    async fn bench(&mut self, info: &WorkerInfo) -> Result<IterReport> {
+impl StatelessBenchSuite for SimpleBench {
+    async fn bench(&mut self, info: &IterInfo) -> Result<IterReport> {
         let t = Instant::now();
 
         // simulate some work
@@ -36,5 +34,5 @@ impl StatelessBenchSuite for FakeBench {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    rlt::cli::run(&BenchCli::parse(), FakeBench).await
+    rlt::cli::run(&BenchCli::parse(), SimpleBench).await
 }

@@ -1,3 +1,4 @@
+//! This module defines traits for stateful and stateless benchmark suites.
 use anyhow::Result;
 use async_trait::async_trait;
 use std::{
@@ -17,43 +18,61 @@ use tokio_util::sync::CancellationToken;
 
 use crate::report::IterReport;
 
+/// Core options for the benchmark runner.
 #[derive(Copy, Clone, Debug)]
 pub struct BenchOpts {
+    /// Start time of the benchmark.
     pub start: Instant,
+
+    /// Number of concurrent workers.
     pub concurrency: u32,
+
+    /// Number of iterations to run.
     pub iterations: Option<u64>,
+
+    /// Duration to run the benchmark.
     pub duration: Option<Duration>,
-    pub rate: Option<u32>, // iterations per second
+
+    /// Rate limit for benchmarking, in iterations per second (ips).
+    pub rate: Option<u32>,
 }
 
 impl BenchOpts {
-    pub fn endtime(&self) -> Option<Instant> {
+    pub(crate) fn endtime(&self) -> Option<Instant> {
         self.duration.map(|d| self.start + d)
     }
 }
 
+/// A trait for benchmark suites.
 #[async_trait]
 pub trait BenchSuite: Clone {
+    /// The state for each worker during the benchmark.
     type WorkerState: Send;
 
+    /// Initialize the state for a worker.
     async fn state(&self, worker_id: u32) -> Result<Self::WorkerState>;
 
-    async fn bench(&mut self, state: &mut Self::WorkerState, info: &WorkerInfo) -> Result<IterReport>;
+    /// Run a single iteration of the benchmark.
+    async fn bench(&mut self, state: &mut Self::WorkerState, info: &IterInfo) -> Result<IterReport>;
 
+    /// Setup procedure before each worker starts.
     #[allow(unused_variables)]
     async fn setup(&mut self, state: &mut Self::WorkerState, worker_id: u32) -> Result<()> {
         Ok(())
     }
 
+    /// Teardown procedure after each worker finishes.
     #[allow(unused_variables)]
-    async fn teardown(self, state: Self::WorkerState, info: WorkerInfo) -> Result<()> {
+    async fn teardown(self, state: Self::WorkerState, info: IterInfo) -> Result<()> {
         Ok(())
     }
 }
 
+/// A trait for stateless benchmark suites.
 #[async_trait]
 pub trait StatelessBenchSuite {
-    async fn bench(&mut self, info: &WorkerInfo) -> Result<IterReport>;
+    /// Run a single iteration of the benchmark.
+    async fn bench(&mut self, info: &IterInfo) -> Result<IterReport>;
 }
 
 #[async_trait]
@@ -67,11 +86,12 @@ where
         Ok(())
     }
 
-    async fn bench(&mut self, _: &mut Self::WorkerState, info: &WorkerInfo) -> Result<IterReport> {
+    async fn bench(&mut self, _: &mut Self::WorkerState, info: &IterInfo) -> Result<IterReport> {
         StatelessBenchSuite::bench(self, info).await
     }
 }
 
+/// A Benchmark runner with a given benchmark suite and control options.
 #[derive(Clone)]
 pub struct Runner<BS>
 where
@@ -85,13 +105,20 @@ where
     seq: Arc<AtomicU64>,
 }
 
-pub struct WorkerInfo {
+/// Information about the current iteration.
+pub struct IterInfo {
+    /// The id of the current worker.
     pub worker_id: u32,
+
+    /// The iteration sequence number of the current worker.
     pub worker_seq: u64,
+
+    /// The iteration sequence number of the current runner.
     pub runner_seq: u64,
 }
 
-impl WorkerInfo {
+impl IterInfo {
+    /// Create a new iteration info for the given worker id.
     pub fn new(worker_id: u32) -> Self {
         Self { worker_id, worker_seq: 0, runner_seq: 0 }
     }
@@ -102,6 +129,7 @@ where
     BS: BenchSuite + Send + Sync + 'static,
     BS::WorkerState: Send + Sync + 'static,
 {
+    /// Create a new benchmark runner with the given benchmark suite and options.
     pub fn new(
         suite: BS,
         opts: BenchOpts,
@@ -112,12 +140,13 @@ where
         Self { suite, opts, res_tx, pause, cancel, seq: Arc::default() }
     }
 
-    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &WorkerInfo) {
+    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) {
         self.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
         self.res_tx.send(res).expect("send report");
     }
 
+    /// Run the benchmark.
     pub async fn run(self) -> Result<()> {
         match self.opts.rate {
             None => self.bench().await,
@@ -125,7 +154,7 @@ where
         }
     }
 
-    /// Run the benchmark.
+    /// Run the benchmark without a rate limit.
     async fn bench(self) -> Result<()> {
         let concurrency = self.opts.concurrency;
         let iterations = self.opts.iterations;
@@ -136,7 +165,7 @@ where
             let mut b = self.clone();
             set.spawn(async move {
                 let mut state = b.suite.state(worker).await?;
-                let mut info = WorkerInfo::new(worker);
+                let mut info = IterInfo::new(worker);
                 let cancel = b.cancel.clone();
 
                 b.suite.setup(&mut state, worker).await?;
@@ -210,7 +239,7 @@ where
             let rx = rx.clone();
             set.spawn(async move {
                 let mut state = b.suite.state(worker).await?;
-                let mut info = WorkerInfo::new(worker);
+                let mut info = IterInfo::new(worker);
                 let cancel = b.cancel.clone();
 
                 b.suite.setup(&mut state, worker).await?;

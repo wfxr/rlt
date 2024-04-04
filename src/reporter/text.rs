@@ -17,6 +17,7 @@ use crate::{
     util::{IntoAdjustedByte, TryIntoAdjustedByte},
 };
 
+/// A text reporter for benchmark results.
 pub struct TextReporter;
 
 impl super::BenchReporter for TextReporter {

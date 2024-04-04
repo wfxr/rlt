@@ -12,6 +12,7 @@ use crate::{
     stats::IterStats,
 };
 
+/// A silent report collector that does not print anything.
 pub struct SilentCollector {
     bench_opts: BenchOpts,
     res_rx: UnboundedReceiver<Result<IterReport>>,
@@ -19,6 +20,7 @@ pub struct SilentCollector {
 }
 
 impl SilentCollector {
+    /// Create a new silent report collector.
     pub fn new(
         bench_opts: BenchOpts,
         res_rx: UnboundedReceiver<Result<IterReport>>,

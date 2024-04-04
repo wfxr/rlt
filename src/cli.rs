@@ -1,4 +1,4 @@
-//! CLI module for the benchmarking tool.
+//! This module provides a CLI interface for the benchmark tool.
 //!
 //! Usually you can embed [`BenchCli`] into your own CLI struct.
 //!
@@ -18,6 +18,7 @@
 //!     pub bench_opts: BenchCli,
 //! }
 //! ```
+//!
 //! The above example will generate a CLI struct with `url` and all the options
 //! from `BenchCli`:
 //!

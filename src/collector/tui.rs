@@ -32,15 +32,22 @@ use crate::{
     util::{IntoAdjustedByte, TryIntoAdjustedByte},
 };
 
+/// A report collector with real-time TUI support.
 pub struct TuiCollector {
+    /// The benchmark options.
     pub bench_opts: BenchOpts,
+    /// Refresh rate for the tui collector, in frames per second (fps)
     pub fps: u8,
+    /// The receiver for iteration reports.
     pub res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
+    /// The sender for pausing the benchmark runner.
     pub pause: watch::Sender<bool>,
+    /// The cancellation token for the benchmark runner.
     pub cancel: CancellationToken,
 }
 
 impl TuiCollector {
+    /// Create a new TUI report collector.
     pub fn new(
         bench_opts: BenchOpts,
         fps: u8,

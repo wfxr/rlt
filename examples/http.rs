@@ -11,9 +11,7 @@ use hyper_util::{
 };
 use rlt::{
     cli::BenchCli,
-    report::IterReport,
-    runner::{BenchSuite, WorkerInfo},
-    status::Status,
+    IterReport, Status, {BenchSuite, IterInfo},
 };
 use tokio::time::Instant;
 
@@ -42,7 +40,7 @@ impl BenchSuite for HttpBench {
         Ok(client)
     }
 
-    async fn bench(&mut self, client: &mut Self::WorkerState, _: &WorkerInfo) -> Result<IterReport> {
+    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> Result<IterReport> {
         let t = Instant::now();
         let mut resp = client.get(self.url.clone()).await?;
 
