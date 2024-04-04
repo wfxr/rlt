@@ -3,7 +3,12 @@
 
 A flexible **R**ust **L**oad **T**esting framework, with real-time tui support.
 
-[![crate](https://img.shields.io/crates/v/rlt.svg)](https://crates.io/crates/rlt)
+[![Crates.io](https://img.shields.io/crates/v/rlt.svg)](https://crates.io/crates/rlt)
+[![Documentation](https://docs.rs/rlt/badge.svg)](https://docs.rs/rlt/)
+[![Dependency status](https://deps.rs/repo/github/wfxr/rlt/status.svg)](https://deps.rs/repo/github/wfxr/rlt)
+[![License](https://img.shields.io/crates/l/csview.svg)](https://github.com/wfxr/rlt?tab=MIT-1-ov-file)
+
+![Screenshot](https://raw.githubusercontent.com/wfxr/i/master/rlt-demo.gif)
 
 **rlt** provides a simple and flexible way to create a load test tool in rust.
 It is designed to be a universal load test framework, which means you can use
