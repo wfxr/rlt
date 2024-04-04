@@ -50,7 +50,7 @@
 //! }
 //! ```
 //!
-//! Stateful bench is also supported, see the [examples/http](https://github.com/wfxr/rlt/blob/main/examples/http.rs).
+//! Stateful bench is also supported, see the [examples/http_reqwest](https://github.com/wfxr/rlt/blob/main/examples/http_reqwest.rs).
 #![deny(missing_docs)]
 
 mod duration;
