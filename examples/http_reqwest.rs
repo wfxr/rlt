@@ -35,12 +35,12 @@ impl BenchSuite for HttpBench {
         let t = Instant::now();
         let resp = client.get(self.url.clone()).send().await?;
 
-        let status = match resp.status() {
-            s if s.is_success() => Status::success(s.as_u16().into()),
-            s if s.is_client_error() => Status::client_error(s.as_u16().into()),
-            s if s.is_server_error() => Status::server_error(s.as_u16().into()),
-            s => Status::error(s.as_u16().into()),
+        let status = if resp.status().is_success() {
+            Status::success(resp.status().as_u16().into())
+        } else {
+            Status::error(resp.status().as_u16().into())
         };
+
         let bytes = resp.bytes().await?.len() as u64;
         let duration = t.elapsed();
 
