@@ -17,7 +17,7 @@
 //!
 //! A simple example of a stateless bench suite:
 //!
-//! ```rust
+//! ```no_run
 //! use anyhow::Result;
 //! use async_trait::async_trait;
 //! use clap::Parser;

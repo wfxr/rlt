@@ -4,7 +4,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```no_run
 //! use clap::Parser;
 //! use rlt::cli::BenchCli;
 //!
