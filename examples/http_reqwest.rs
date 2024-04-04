@@ -1,14 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use bytes::Bytes;
 use clap::Parser;
-use http_body_util::{BodyExt, Full};
-use hyper::Uri;
-use hyper_tls::HttpsConnector;
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
+use reqwest::{Client, Url};
 use rlt::{
     cli::BenchCli,
     IterReport, Status, {BenchSuite, IterInfo},
@@ -18,7 +11,7 @@ use tokio::time::Instant;
 #[derive(Parser, Clone)]
 pub struct Opts {
     /// Target URL.
-    pub url: Uri,
+    pub url: Url,
 
     /// Embed BenchOpts into this Opts.
     #[command(flatten)]
@@ -27,22 +20,20 @@ pub struct Opts {
 
 #[derive(Clone)]
 struct HttpBench {
-    url: Uri,
+    url: Url,
 }
 
 #[async_trait]
 impl BenchSuite for HttpBench {
-    type WorkerState = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;
+    type WorkerState = Client;
 
     async fn state(&self, _: u32) -> Result<Self::WorkerState> {
-        let https = HttpsConnector::new();
-        let client = Client::builder(TokioExecutor::new()).build(https);
-        Ok(client)
+        Ok(Client::new())
     }
 
     async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> Result<IterReport> {
         let t = Instant::now();
-        let mut resp = client.get(self.url.clone()).await?;
+        let resp = client.get(self.url.clone()).send().await?;
 
         let status = match resp.status() {
             s if s.is_success() => Status::success(s.as_u16().into()),
@@ -50,11 +41,7 @@ impl BenchSuite for HttpBench {
             s if s.is_server_error() => Status::server_error(s.as_u16().into()),
             s => Status::error(s.as_u16().into()),
         };
-
-        let mut bytes = 0;
-        while let Some(next) = resp.frame().await {
-            bytes += next?.data_ref().map(Bytes::len).unwrap_or_default() as u64;
-        }
+        let bytes = resp.bytes().await?.len() as u64;
         let duration = t.elapsed();
 
         Ok(IterReport { duration, status, bytes, items: 1 })

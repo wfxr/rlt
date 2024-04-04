@@ -49,3 +49,4 @@ hyper-util = { version = "0.1", features = [
     "http1",
     "tokio",
 ] }
+reqwest = "0.12"
