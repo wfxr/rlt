@@ -20,7 +20,7 @@ pub struct Opts {
     /// Target URL.
     pub url: Uri,
 
-    /// Embed BenchOpts into this Opts.
+    /// Embed BenchCli into this Opts.
     #[command(flatten)]
     pub bench_opts: BenchCli,
 }
@@ -56,6 +56,6 @@ impl BenchSuite for HttpBench {
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
-    let bench_suite = HttpBench { url: opts.url };
-    rlt::cli::run(&opts.bench_opts, bench_suite).await
+    let bench = HttpBench { url: opts.url };
+    rlt::cli::run(opts.bench_opts, bench).await
 }

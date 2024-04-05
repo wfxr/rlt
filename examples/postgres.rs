@@ -31,7 +31,7 @@ pub struct DBBench {
     #[clap(long, default_value = "t")]
     pub table: String,
 
-    /// Embed BenchOpts into this Opts.
+    /// Embed BenchCli into this Opts.
     #[command(flatten)]
     pub bench_opts: BenchCli,
 }
@@ -97,5 +97,5 @@ impl BenchSuite for DBBench {
 #[tokio::main]
 async fn main() -> Result<()> {
     let bs: DBBench = DBBench::parse();
-    rlt::cli::run(&bs.bench_opts.clone(), bs).await
+    rlt::cli::run(bs.bench_opts, bs).await
 }

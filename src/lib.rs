@@ -46,7 +46,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<()> {
-//!     rlt::cli::run(&BenchCli::parse(), SimpleBench).await
+//!     rlt::cli::run(BenchCli::parse(), SimpleBench).await
 //! }
 //! ```
 //!

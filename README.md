@@ -25,13 +25,23 @@ database, or more complex and customized services.
 
 ### Quick Start
 
-To use `rlt`, firstly add it as a dependency by running `cargo add rlt`.
+To use `rlt`, firstly add it as a dependency:
+
+```
+$ cargo add rlt
+```
 Then create your bench suite by implementing the `BenchSuite` trait.
+You can use `flatten` attribute provided by `clap` to embed the predefined `BenchCli` into your own.
 
 ```rust
-#[derive(Clone)]
-struct HttpBench {
-    url: Url,
+#[derive(Parser, Clone)]
+pub struct HttpBench {
+    /// Target URL.
+    pub url: Url,
+
+    /// Embed BenchCli into this Opts.
+    #[command(flatten)]
+    pub bench_opts: BenchCli,
 }
 
 #[async_trait]
@@ -53,33 +63,19 @@ impl BenchSuite for HttpBench {
 }
 ```
 
-Then, create a Opts struct to parse command line arguments.
-Note that you can use `flatten` attribute provided by `clap` to embed the predefined `BenchCli` options into your own.
+Note that you can create a separate struct to hold the cli options for more flexibility. There is an example in [examples/http_hyper.rs](examples/http_hyper.rs).
 
-```rust
-#[derive(parser, clone)]
-pub struct opts {
-    /// target url.
-    pub url: url,
-
-    /// embed benchopts into this opts.
-    #[command(flatten)]
-    pub bench_opts: benchcli,
-}
-```
-
-Finally, create the main function to run the load test.
+Finally, create the main function to run the load test:
 
 ```rust
 #[tokio::main]
 async fn main() -> Result<()> {
-    let opts: Opts = Opts::parse();
-    let bench_suite = HttpBench { url: opts.url };
-    rlt::cli::run(&opts.bench_opts, bench_suite).await
+    let bs = HttpBench::parse();
+    rlt::cli::run(bs.bench_opts, bs).await
 }
 ```
 
-See the [examples](examples) directory for more examples.
+More examples can be found in the [examples](examples) directory.
 
 ### Credits
 

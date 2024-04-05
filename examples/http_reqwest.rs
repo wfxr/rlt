@@ -9,18 +9,13 @@ use rlt::{
 use tokio::time::Instant;
 
 #[derive(Parser, Clone)]
-pub struct Opts {
+pub struct HttpBench {
     /// Target URL.
     pub url: Url,
 
-    /// Embed BenchOpts into this Opts.
+    /// Embed BenchCli into this Opts.
     #[command(flatten)]
     pub bench_opts: BenchCli,
-}
-
-#[derive(Clone)]
-struct HttpBench {
-    url: Url,
 }
 
 #[async_trait]
@@ -43,7 +38,6 @@ impl BenchSuite for HttpBench {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let opts: Opts = Opts::parse();
-    let bench_suite = HttpBench { url: opts.url };
-    rlt::cli::run(&opts.bench_opts, bench_suite).await
+    let bs = HttpBench::parse();
+    rlt::cli::run(bs.bench_opts, bs).await
 }
