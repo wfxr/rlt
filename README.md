@@ -1,7 +1,7 @@
 # rlt
 
 
-A flexible **R**ust **L**oad **T**esting framework with real-time tui support.
+A **R**ust **L**oad **T**esting framework with real-time tui support.
 
 [![Crates.io](https://img.shields.io/crates/v/rlt.svg)](https://crates.io/crates/rlt)
 [![Documentation](https://docs.rs/rlt/badge.svg)](https://docs.rs/rlt/)
