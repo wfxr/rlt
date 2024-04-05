@@ -18,6 +18,10 @@ repository = "https://github.com/wfxr/rlt"
 name = "rlt"
 path = "src/lib.rs"
 
+[features]
+default = ["http"]
+http = ["dep:http"]
+
 [dependencies]
 anyhow = "1"
 byte-unit = "5.1"
@@ -36,6 +40,7 @@ async-trait = "0.1"
 hdrhistogram = "7.5"
 itertools = "0.12"
 tabled = "0.15"
+http = { version = "1.1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.36", features = ["rt-multi-thread"] }

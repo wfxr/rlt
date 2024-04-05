@@ -4,7 +4,7 @@ use clap::Parser;
 use reqwest::{Client, Url};
 use rlt::{
     cli::BenchCli,
-    IterReport, Status, {BenchSuite, IterInfo},
+    IterReport, {BenchSuite, IterInfo},
 };
 use tokio::time::Instant;
 
@@ -34,16 +34,9 @@ impl BenchSuite for HttpBench {
     async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> Result<IterReport> {
         let t = Instant::now();
         let resp = client.get(self.url.clone()).send().await?;
-
-        let status = if resp.status().is_success() {
-            Status::success(resp.status().as_u16().into())
-        } else {
-            Status::error(resp.status().as_u16().into())
-        };
-
+        let status = resp.status().into();
         let bytes = resp.bytes().await?.len() as u64;
         let duration = t.elapsed();
-
         Ok(IterReport { duration, status, bytes, items: 1 })
     }
 }

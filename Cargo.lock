@@ -1302,6 +1302,7 @@ dependencies = [
  "crossterm",
  "flume",
  "hdrhistogram",
+ "http",
  "http-body-util",
  "humantime",
  "hyper",
