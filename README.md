@@ -19,8 +19,8 @@ rlt for various services, such as Http, gRPC, Thrift, Database, or other customi
 - **Flexible**: Customize the work load with your own logic.
 - **Easy to use**: Little boilerplate code, just focus on testing.
 - **Rich Statistics**: Collect and display rich statistics.
-- **High performance**: Carefully optimized for performance and resource usage.
-- **Real-time TUI**: Monitor the progress of the load test with a powerful real-time TUI.
+- **High performance**: Optimized for performance and resource usage.
+- **Real-time TUI**: Monitor testing progress with a powerful real-time TUI.
 
 ### Quick Start
 
