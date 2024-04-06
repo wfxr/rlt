@@ -1,15 +1,14 @@
 //! A universal load testing library for Rust, with real-time tui support.
 //!
-//! This crate provides a simple and flexible way to create a load test tool in rust.
-//! It is designed to be a universal load test framework, which means you can use
-//! rlt to create load test tools for different kinds of services, such as http, grpc,
-//! database, or more complex and customized services.
+//! This crate provides a simple way to create load test tools in Rust. It is designed
+//! to be a universal load test framework, which means you can use rlt for various
+//! services, such as Http, gRPC, Thrift, Database, or other customized services.
 //!
 //! ## Features
 //!
-//! - **Flexible**: Customize the load test scenario with your own logic.
-//! - **Easy to use**: Little boilerplate code, just focus on testing logic.
-//! - **Rich Statistics**: Collect and display rich statistics during the load test.
+//! - **Flexible**: Customize the work load with your own logic.
+//! - **Easy to use**: Little boilerplate code, just focus on testing.
+//! - **Rich Statistics**: Collect and display rich statistics.
 //! - **High performance**: Carefully optimized for performance and resource usage.
 //! - **Real-time TUI**: Monitor the progress of the load test with a powerful real-time TUI.
 //!

@@ -10,16 +10,15 @@ A **R**ust **L**oad **T**esting framework with real-time tui support.
 
 ![Screenshot](https://raw.githubusercontent.com/wfxr/i/master/rlt-demo.gif)
 
-**rlt** provides a simple but flexible way to create a load test tool in Rust.
+**rlt** provides a simple way to create load test tools in Rust.
 It is designed to be a universal load test framework, which means you can use
-rlt to create load test tools for different kinds of services, such as http, grpc,
-database, or more complex and customized services.
+rlt for various services, such as Http, gRPC, Thrift, Database, or other customized services.
 
 ### Features
 
-- **Flexible**: Customize the load test scenario with your own logic.
-- **Easy to use**: Little boilerplate code, just focus on testing logic.
-- **Rich Statistics**: Collect and display rich statistics during the load test.
+- **Flexible**: Customize the work load with your own logic.
+- **Easy to use**: Little boilerplate code, just focus on testing.
+- **Rich Statistics**: Collect and display rich statistics.
 - **High performance**: Carefully optimized for performance and resource usage.
 - **Real-time TUI**: Monitor the progress of the load test with a powerful real-time TUI.
 
