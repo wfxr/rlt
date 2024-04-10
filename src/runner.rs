@@ -106,6 +106,7 @@ where
 }
 
 /// Information about the current iteration.
+#[derive(Debug, Clone)]
 pub struct IterInfo {
     /// The id of the current worker.
     pub worker_id: u32,
@@ -143,6 +144,9 @@ where
     async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) {
         self.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
+        if let Err(e) = &res {
+            log::error!("Error in iteration({info:?}): {:?}", e);
+        }
         self.res_tx.send(res).expect("send report");
     }
 

@@ -69,5 +69,5 @@ pub use crate::{
     report::IterReport,
     runner::IterInfo,
     runner::{BenchSuite, StatelessBenchSuite},
-    status::Status,
+    status::{Status, StatusKind},
 };
