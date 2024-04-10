@@ -6,20 +6,22 @@ use crossterm::{
     terminal, ExecutableCommand,
 };
 use itertools::Itertools;
+use log::{trace, LevelFilter};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::Line,
-    widgets::{block::Title, BarChart, Block, Borders, Clear, Gauge, Padding, Paragraph},
+    widgets::{block::Title, BarChart, Block, BorderType, Borders, Clear, Gauge, Padding, Paragraph},
     CompletedFrame, Frame,
 };
-use std::{collections::HashMap, fmt, io, time::Duration};
+use std::{collections::HashMap, fmt, io, str::FromStr, time::Duration};
 use tokio::{
     sync::{mpsc, watch},
     time::MissedTickBehavior,
 };
 use tokio_util::sync::CancellationToken;
+use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget, TuiWidgetEvent, TuiWidgetState};
 
 use crate::{
     collector::ReportCollector,
@@ -113,6 +115,15 @@ impl ReportCollector for TuiCollector {
         let mut refresh_timer = tokio::time::interval(Duration::from_secs(1) / self.fps as u32);
         refresh_timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
+        let log_level = match std::env::var("RUST_LOG") {
+            Ok(log_level) => LevelFilter::from_str(&log_level).unwrap_or(LevelFilter::Info),
+            Err(_) => LevelFilter::Info,
+        };
+        tui_logger::init_logger(log_level).map_err(|e| anyhow::anyhow!(e))?;
+        tui_logger::set_default_level(log_level);
+        let mut log_state = TuiWidgetState::new().set_default_display_level(log_level);
+        let mut show_logs = false;
+
         let mut elapsed;
         'outer: loop {
             loop {
@@ -126,24 +137,64 @@ impl ReportCollector for TuiCollector {
                                 Event::Key(KeyEvent { code: KeyCode::Char('+'), .. }) => {
                                     current_tw = current_tw.prev();
                                     auto_tw = false;
+                                    trace!("time window set to {}", current_tw);
                                 }
                                 Event::Key(KeyEvent { code: KeyCode::Char('-'), .. }) => {
                                     current_tw = current_tw.next();
                                     auto_tw = false;
+                                    trace!("time window set to {}", current_tw);
                                 }
-                                Event::Key(KeyEvent { code: KeyCode::Char('a'), .. }) => auto_tw = true,
-                                Event::Key(KeyEvent { code: KeyCode::Char('q'), .. })
-                                | Event::Key(KeyEvent {
-                                    code: KeyCode::Char('c'), modifiers: KeyModifiers::CONTROL, ..
-                                }) => {
+                                Event::Key(KeyEvent { code: KeyCode::Char('a'), .. }) => {
+                                    auto_tw = true;
+                                    trace!("auto time window enabled");
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::Char('q'), .. }) |
+                                Event::Key(KeyEvent { code: KeyCode::Char('c'), modifiers: KeyModifiers::CONTROL, .. }) => {
                                     self.cancel.cancel();
+                                    trace!("benchmark canceled");
                                     break;
                                 }
                                 // TODO: pause logical time instead of real time
-                                Event::Key(KeyEvent { code: KeyCode::Char('p'), .. }) | Event::Key(KeyEvent { code: KeyCode::Pause, .. }) => {
+                                Event::Key(KeyEvent { code: KeyCode::Char('p'), .. }) |
+                                Event::Key(KeyEvent { code: KeyCode::Pause, .. }) => {
                                     let pause = !*self.pause.borrow();
                                     self.pause.send_replace(pause);
+                                    trace!("benchmark {}", if pause { "paused" } else { "resumed" });
                                 }
+
+                                Event::Key(KeyEvent { code: KeyCode::Char('l'), .. }) => {
+                                    show_logs = !show_logs;
+                                    trace!("{} logs window", if show_logs { "show" } else { "hide" });
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::PageDown, .. }) |
+                                Event::Key(KeyEvent { code: KeyCode::Char('f'), .. }) if show_logs => {
+                                    log_state.transition(TuiWidgetEvent::NextPageKey);
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::PageUp, .. }) |
+                                Event::Key(KeyEvent { code: KeyCode::Char('b'), .. }) if show_logs => {
+                                    log_state.transition(TuiWidgetEvent::PrevPageKey);
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::Char(' '), .. }) if show_logs => {
+                                    log_state.transition(TuiWidgetEvent::HideKey);
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::Up, .. }) if show_logs => {
+                                    log_state.transition(TuiWidgetEvent::UpKey);
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::Down, .. }) if show_logs => {
+                                    log_state.transition(TuiWidgetEvent::DownKey);
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::Left, .. }) if show_logs => {
+                                    log_state.transition(TuiWidgetEvent::LeftKey);
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::Right, .. }) if show_logs => {
+                                    log_state.transition(TuiWidgetEvent::RightKey);
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::Enter, .. }) if show_logs => {
+                                    log_state.transition(TuiWidgetEvent::FocusKey);
+                                },
+                                Event::Key(KeyEvent { code: KeyCode::Esc, .. }) if show_logs => {
+                                    log_state.transition(TuiWidgetEvent::EscapeKey);
+                                },
                                 _ => (),
                             }
                         }
@@ -216,6 +267,10 @@ impl ReportCollector for TuiCollector {
                 render_iter_hist(f, bot[0], &latest_iters, current_tw);
                 render_latency_hist(f, bot[1], &hist, 7);
                 render_tips(f, rows[4]);
+
+                if show_logs {
+                    render_logs(f, &log_state);
+                }
             })?;
         }
 
@@ -223,6 +278,63 @@ impl ReportCollector for TuiCollector {
         let concurrency = self.bench_opts.concurrency;
         Ok(BenchReport { concurrency, hist, stats, status_dist, error_dist, elapsed })
     }
+}
+
+fn render_logs(frame: &mut Frame, log_state: &TuiWidgetState) {
+    let log_widget = TuiLoggerSmartWidget::default()
+        .style_error(Style::default().fg(Color::Red))
+        .style_debug(Style::default().fg(Color::Green))
+        .style_warn(Style::default().fg(Color::Yellow))
+        .style_trace(Style::default().fg(Color::Magenta))
+        .style_info(Style::default().fg(Color::Cyan))
+        .border_type(BorderType::Rounded)
+        .output_separator('|')
+        .output_level(Some(TuiLoggerLevelOutput::Abbreviated))
+        .output_target(true)
+        .output_file(true)
+        .output_line(true)
+        .title_log("Logs")
+        .title_target("Selector")
+        .state(log_state);
+
+    let area = centered_rect(80, 80, frame.size());
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(100), Constraint::Min(1)])
+        .split(area.inner(&Margin::new(1, 1)));
+
+    #[rustfmt::skip]
+    let tips = vec![Line::from(vec![
+        "Enter".bold().yellow().italic(), ": Focus target, ".italic(),
+        "↑/↓".bold().yellow().italic(),   ": Select target, ".italic(),
+        "←/→".bold().yellow().italic(),   ": Display level, ".italic(),
+        "f/b".bold().yellow().italic(),   ": Scroll, ".italic(),
+        "Esc".bold().yellow().italic(),   ": Cancel scroll ".italic(),
+        "Space".bold().yellow().italic(), ": Hide selector ".italic(),
+    ])];
+    let tips = Paragraph::new(tips)
+        .block(Block::default().borders(Borders::NONE))
+        .right_aligned();
+
+    frame.render_widget(Clear, area);
+    frame.render_widget(log_widget, rows[0]);
+    frame.render_widget(tips, rows[1]);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::vertical([
+        Constraint::Percentage((100 - percent_y) / 2),
+        Constraint::Percentage(percent_y),
+        Constraint::Percentage((100 - percent_y) / 2),
+    ])
+    .split(r);
+
+    Layout::horizontal([
+        Constraint::Percentage((100 - percent_x) / 2),
+        Constraint::Percentage(percent_x),
+        Constraint::Percentage((100 - percent_x) / 2),
+    ])
+    .split(popup_layout[1])[1]
 }
 
 fn render_stats_timewin(frame: &mut Frame, area: Rect, stats: &RotateDiffWindowGroup, tw: TimeWindow) {
@@ -486,18 +598,13 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
 
 fn render_tips(frame: &mut Frame, area: Rect) {
     // TODO: is there a better way to render this?
+    #[rustfmt::skip]
     let tips = vec![Line::from(vec![
-        "Press ".italic(),
-        "-".bold().yellow(),
-        "/".italic(),
-        "+".bold().yellow(),
-        " to zoom in/out the time window, ".italic(),
-        "a".bold().yellow(),
-        " to enable auto time window, ".italic(),
-        "p".bold().yellow(),
-        " to pause, ".italic(),
-        "q".bold().yellow(),
-        " to quit ".italic(),
+        "+/-".bold().yellow().italic(), ": Zoom in/out, ".italic(),
+        "a".bold().yellow().italic(),   ": Auto time window, ".italic(),
+        "l".bold().yellow().italic(),   ": Logs window, ".italic(),
+        "p".bold().yellow().italic(),   ": Pause, ".italic(),
+        "q".bold().yellow().italic(),   ": Quit ".italic(),
     ])];
     let p = Paragraph::new(tips)
         .block(Block::default().borders(Borders::NONE))

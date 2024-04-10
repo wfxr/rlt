@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
+use log::warn;
 use rlt::{
     cli::BenchCli,
     IterReport, Status, {IterInfo, StatelessBenchSuite},
@@ -28,6 +29,12 @@ impl StatelessBenchSuite for SimpleBench {
 
         // simulate items processed in current iteration
         let items = info.worker_seq % 100;
+
+        // press `l` to see log output
+        if status.kind() != rlt::StatusKind::Success {
+            warn!("duration: {:?}, status: {}, items: {}", duration, status, items);
+        }
+
         Ok(IterReport { duration, status, bytes: items * 1024, items })
     }
 }

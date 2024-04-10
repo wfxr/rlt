@@ -41,6 +41,8 @@ hdrhistogram = "7.5"
 itertools = "0.12"
 tabled = "0.15"
 http = { version = "1.1", optional = true }
+tui-logger = "0.11"
+log = "0.4"
 
 [dev-dependencies]
 tokio = { version = "1.36", features = ["rt-multi-thread"] }
