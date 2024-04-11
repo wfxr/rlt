@@ -21,6 +21,7 @@ path = "src/lib.rs"
 [features]
 default = ["http"]
 http = ["dep:http"]
+log = ["dep:log", "dep:tui-logger"]
 
 [dependencies]
 anyhow = "1"
@@ -41,8 +42,9 @@ hdrhistogram = "7.5"
 itertools = "0.12"
 tabled = "0.15"
 http = { version = "1.1", optional = true }
-tui-logger = "0.11"
-log = "0.4"
+tui-logger = { version = "0.11", optional = true }
+log = { version = "0.4", optional = true }
+cfg-if = "1"
 
 [dev-dependencies]
 tokio = { version = "1.36", features = ["rt-multi-thread"] }

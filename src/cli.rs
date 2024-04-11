@@ -197,7 +197,7 @@ where
     let runner = Runner::new(bench_suite, opts, res_tx, pause_rx, cancel.clone());
 
     let mut collector: Box<dyn ReportCollector> = match cli.collector() {
-        Collector::Tui => Box::new(TuiCollector::new(opts, cli.fps, res_rx, pause_tx, cancel)),
+        Collector::Tui => Box::new(TuiCollector::new(opts, cli.fps, res_rx, pause_tx, cancel)?),
         Collector::Silent => Box::new(SilentCollector::new(opts, res_rx, cancel)),
     };
 

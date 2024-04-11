@@ -144,6 +144,7 @@ where
     async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) {
         self.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
+        #[cfg(feature = "log")]
         if let Err(e) = &res {
             log::error!("Error in iteration({info:?}): {:?}", e);
         }
