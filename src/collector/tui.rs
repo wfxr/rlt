@@ -289,8 +289,8 @@ fn render_stats_timewin(frame: &mut Frame, area: Rect, stats: &RotateDiffWindowG
         frame,
         area,
         Title::from(Line::from(vec![
-            " Stats for ".into(),
-            format!("last {} ", tw).yellow().bold(),
+            "Stats for ".into(),
+            format!("last {}", tw).yellow().bold(),
         ])),
         &stats.counter,
         duration,
@@ -298,7 +298,7 @@ fn render_stats_timewin(frame: &mut Frame, area: Rect, stats: &RotateDiffWindowG
 }
 
 fn render_stats_overall(frame: &mut Frame, area: Rect, counter: &Counter, elapsed: Duration) {
-    render_stats(frame, area, " Stats overall ".into(), counter, elapsed);
+    render_stats(frame, area, "Stats overall".into(), counter, elapsed);
 }
 
 fn render_stats(frame: &mut Frame, area: Rect, title: Title, counter: &Counter, elapsed: Duration) {
@@ -388,7 +388,7 @@ fn render_process_gauge(
     }
 
     let guage = Gauge::default()
-        .block(Block::new().title(" Progress ").borders(Borders::ALL))
+        .block(Block::new().title("Progress").borders(Borders::ALL))
         .gauge_style(Style::new().fg(Color::Cyan))
         .label(label)
         .ratio(progress);
@@ -410,7 +410,7 @@ fn render_status_dist(frame: &mut Frame, area: Rect, status_dist: &HashMap<Statu
             Line::from(s)
         })
         .collect_vec();
-    let p = Paragraph::new(dist).block(Block::new().title(" Status distribution ").borders(Borders::ALL));
+    let p = Paragraph::new(dist).block(Block::new().title("Status distribution").borders(Borders::ALL));
     frame.render_widget(p, area);
 }
 
@@ -424,7 +424,7 @@ fn render_error_dist(frame: &mut Frame, area: Rect, error_dist: &HashMap<String,
         .sorted_by_key(|(_, &cnt)| std::cmp::Reverse(cnt))
         .map(|(err, cnt)| Line::from(format!("[{cnt}] {err}")))
         .collect_vec();
-    let p = Paragraph::new(dist).block(Block::new().title(" Error distribution ").borders(Borders::ALL));
+    let p = Paragraph::new(dist).block(Block::new().title("Error distribution").borders(Borders::ALL));
     frame.render_widget(p, area);
 }
 
@@ -458,7 +458,7 @@ fn render_iter_hist(frame: &mut Frame, area: Rect, rwg: &RotateWindowGroup, tw: 
         .map(|w| w + 2)
         .unwrap_or(1) as u16;
     let chart = BarChart::default()
-        .block(Block::new().title(" Iteration histogram ").borders(Borders::ALL))
+        .block(Block::new().title("Iteration histogram").borders(Borders::ALL))
         .data(bar_num_iter_str.as_slice())
         .bar_style(Style::default().fg(Color::Green))
         .label_style(Style::default().fg(Color::Cyan))
@@ -480,9 +480,9 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
         .block(
             Block::new()
                 .title(Title::from(Line::from(vec![
-                    " Latency histogram (".into(),
+                    "Latency histogram (".into(),
                     u.to_string().yellow().bold(),
-                    ") ".into(),
+                    ")".into(),
                 ])))
                 .borders(Borders::ALL),
         )
