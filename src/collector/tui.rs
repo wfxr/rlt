@@ -150,79 +150,63 @@ impl ReportCollector for TuiCollector {
                         latest_stats.rotate(t, &stats);
 
                         while crossterm::event::poll(Duration::from_secs(0))? {
-                            match crossterm::event::read()? {
-                                Event::Key(KeyEvent { code: KeyCode::Char('+'), .. }) => {
-                                    current_tw = current_tw.prev();
-                                    auto_tw = false;
+                            use KeyCode::*;
+                            if let Event::Key(KeyEvent { code, modifiers, .. }) = crossterm::event::read()? {
+                                match (code, modifiers) {
+                                    (Char('+'), _) => {
+                                        current_tw = current_tw.prev();
+                                        auto_tw = false;
+                                        #[cfg(feature = "log")]
+                                        trace!("time window set to {}", current_tw);
+                                    }
+                                    (Char('-'), _) => {
+                                        current_tw = current_tw.next();
+                                        auto_tw = false;
+                                        #[cfg(feature = "log")]
+                                        trace!("time window set to {}", current_tw);
+                                    }
+                                    (Char('a'), _) => {
+                                        auto_tw = true;
+                                        #[cfg(feature = "log")]
+                                        trace!("auto time window enabled");
+                                    },
+                                    (Char('q'), _) | (Char('c'), KeyModifiers::CONTROL) => {
+                                        self.cancel.cancel();
+                                        #[cfg(feature = "log")]
+                                        trace!("benchmark canceled");
+                                        break 'outer;
+                                    }
+                                    (Char('p') | Pause, _) => {
+                                        // TODO: pause logical time instead of real time
+                                        let pause = !*self.pause.borrow();
+                                        self.pause.send_replace(pause);
+                                        #[cfg(feature = "log")]
+                                        trace!("benchmark {}", if pause { "paused" } else { "resumed" });
+                                    }
                                     #[cfg(feature = "log")]
-                                    trace!("time window set to {}", current_tw);
-                                }
-                                Event::Key(KeyEvent { code: KeyCode::Char('-'), .. }) => {
-                                    current_tw = current_tw.next();
-                                    auto_tw = false;
+                                    (Char('l'), _) => {
+                                        show_logs = !show_logs;
+                                        trace!("{} logs window", if show_logs { "show" } else { "hide" });
+                                    },
                                     #[cfg(feature = "log")]
-                                    trace!("time window set to {}", current_tw);
-                                }
-                                Event::Key(KeyEvent { code: KeyCode::Char('a'), .. }) => {
-                                    auto_tw = true;
-                                    #[cfg(feature = "log")]
-                                    trace!("auto time window enabled");
-                                },
-                                Event::Key(KeyEvent { code: KeyCode::Char('q'), .. }) |
-                                Event::Key(KeyEvent { code: KeyCode::Char('c'), modifiers: KeyModifiers::CONTROL, .. }) => {
-                                    self.cancel.cancel();
-                                    #[cfg(feature = "log")]
-                                    trace!("benchmark canceled");
-                                    break;
-                                }
-                                // TODO: pause logical time instead of real time
-                                Event::Key(KeyEvent { code: KeyCode::Char('p'), .. }) |
-                                Event::Key(KeyEvent { code: KeyCode::Pause, .. }) => {
-                                    let pause = !*self.pause.borrow();
-                                    self.pause.send_replace(pause);
-                                    #[cfg(feature = "log")]
-                                    trace!("benchmark {}", if pause { "paused" } else { "resumed" });
-                                }
-
-                                #[cfg(feature = "log")]
-                                Event::Key(KeyEvent { code: KeyCode::Char('l'), .. }) => {
-                                    show_logs = !show_logs;
-                                    trace!("{} logs window", if show_logs { "show" } else { "hide" });
-                                },
-                                #[cfg(feature = "log")]
-                                e if show_logs => match e {
-                                    Event::Key(KeyEvent { code: KeyCode::PageDown, .. }) |
-                                    Event::Key(KeyEvent { code: KeyCode::Char('f'), .. }) => {
-                                        self.log_state.transition(TuiWidgetEvent::NextPageKey);
-                                    },
-                                    Event::Key(KeyEvent { code: KeyCode::PageUp, .. }) |
-                                    Event::Key(KeyEvent { code: KeyCode::Char('b'), .. }) => {
-                                        self.log_state.transition(TuiWidgetEvent::PrevPageKey);
-                                    },
-                                    Event::Key(KeyEvent { code: KeyCode::Char(' '), .. }) => {
-                                        self.log_state.transition(TuiWidgetEvent::HideKey);
-                                    },
-                                    Event::Key(KeyEvent { code: KeyCode::Up, .. }) => {
-                                        self.log_state.transition(TuiWidgetEvent::UpKey);
-                                    },
-                                    Event::Key(KeyEvent { code: KeyCode::Down, .. }) => {
-                                        self.log_state.transition(TuiWidgetEvent::DownKey);
-                                    },
-                                    Event::Key(KeyEvent { code: KeyCode::Left, .. }) => {
-                                        self.log_state.transition(TuiWidgetEvent::LeftKey);
-                                    },
-                                    Event::Key(KeyEvent { code: KeyCode::Right, .. }) => {
-                                        self.log_state.transition(TuiWidgetEvent::RightKey);
-                                    },
-                                    Event::Key(KeyEvent { code: KeyCode::Enter, .. }) => {
-                                        self.log_state.transition(TuiWidgetEvent::FocusKey);
-                                    },
-                                    Event::Key(KeyEvent { code: KeyCode::Esc, .. }) => {
-                                        self.log_state.transition(TuiWidgetEvent::EscapeKey);
-                                    },
+                                    (code, _) if show_logs => {
+                                        use TuiWidgetEvent::*;
+                                        let mut txn = |e| self.log_state.transition(e);
+                                        match code {
+                                            Char(' ')            => txn(HideKey),
+                                            PageDown | Char('f') => txn(NextPageKey),
+                                            PageUp   | Char('b') => txn(PrevPageKey),
+                                            Up                   => txn(UpKey),
+                                            Down                 => txn(DownKey),
+                                            Left                 => txn(LeftKey),
+                                            Right                => txn(RightKey),
+                                            Enter                => txn(FocusKey),
+                                            Esc                  => txn(EscapeKey),
+                                            _                    => (),
+                                        }
+                                    }
                                     _ => (),
-                                },
-                                _ => (),
+                                }
                             }
                         }
 
