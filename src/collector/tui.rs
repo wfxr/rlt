@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 cfg_if::cfg_if! {
     if #[cfg(feature = "log")] {
         use std::str::FromStr;
-        use log::{trace, LevelFilter};
+        use log::LevelFilter;
         use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget, TuiWidgetEvent, TuiWidgetState};
     }
 }
@@ -156,38 +156,23 @@ impl ReportCollector for TuiCollector {
                                     (Char('+'), _) => {
                                         current_tw = current_tw.prev();
                                         auto_tw = false;
-                                        #[cfg(feature = "log")]
-                                        trace!("time window set to {}", current_tw);
                                     }
                                     (Char('-'), _) => {
                                         current_tw = current_tw.next();
                                         auto_tw = false;
-                                        #[cfg(feature = "log")]
-                                        trace!("time window set to {}", current_tw);
                                     }
-                                    (Char('a'), _) => {
-                                        auto_tw = true;
-                                        #[cfg(feature = "log")]
-                                        trace!("auto time window enabled");
-                                    },
+                                    (Char('a'), _) => auto_tw = true,
                                     (Char('q'), _) | (Char('c'), KeyModifiers::CONTROL) => {
                                         self.cancel.cancel();
-                                        #[cfg(feature = "log")]
-                                        trace!("benchmark canceled");
                                         break 'outer;
                                     }
                                     (Char('p') | Pause, _) => {
                                         // TODO: pause logical time instead of real time
                                         let pause = !*self.pause.borrow();
                                         self.pause.send_replace(pause);
-                                        #[cfg(feature = "log")]
-                                        trace!("benchmark {}", if pause { "paused" } else { "resumed" });
                                     }
                                     #[cfg(feature = "log")]
-                                    (Char('l'), _) => {
-                                        show_logs = !show_logs;
-                                        trace!("{} logs window", if show_logs { "show" } else { "hide" });
-                                    },
+                                    (Char('l'), _) => show_logs = !show_logs,
                                     #[cfg(feature = "log")]
                                     (code, _) if show_logs => {
                                         use TuiWidgetEvent::*;
