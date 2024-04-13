@@ -1,9 +1,6 @@
-use std::{
-    collections::VecDeque,
-    iter::{once, repeat_with},
-};
+use std::collections::VecDeque;
 
-use tokio::time::{Duration, Instant};
+use tokio::time::Duration;
 
 use crate::report::IterReport;
 
@@ -34,10 +31,6 @@ impl RotateWindow {
         self.buckets.push_front(bucket);
     }
 
-    fn rotate_multi(&mut self, buckets: impl Iterator<Item = IterStats>) {
-        buckets.for_each(|bucket| self.rotate(bucket));
-    }
-
     fn len(&self) -> usize {
         self.buckets.len()
     }
@@ -58,7 +51,7 @@ impl RotateWindow {
 }
 
 pub struct RotateWindowGroup {
-    frame: Instant,
+    pub counter: u64,
     pub stats_by_sec: RotateWindow,
     pub stats_by_10sec: RotateWindow,
     pub stats_by_min: RotateWindow,
@@ -66,9 +59,9 @@ pub struct RotateWindowGroup {
 }
 
 impl RotateWindowGroup {
-    pub fn new(frame: Instant, buckets: usize) -> Self {
+    pub fn new(buckets: usize) -> Self {
         Self {
-            frame,
+            counter: 0,
             stats_by_sec: RotateWindow::new(buckets),
             stats_by_10sec: RotateWindow::new(buckets),
             stats_by_min: RotateWindow::new(buckets),
@@ -83,26 +76,22 @@ impl RotateWindowGroup {
         self.stats_by_10min.push(stats);
     }
 
-    pub fn rotate(&mut self, now: Instant) {
-        let duration = now - self.frame;
-        if duration.as_secs() == 0 {
-            return;
-        }
+    pub fn rotate(&mut self) {
+        self.counter += 1;
         self.stats_by_sec.rotate(IterStats::new());
-        if duration.as_secs() % 10 == 0 {
+        if self.counter % 10 == 0 {
             self.stats_by_10sec.rotate(IterStats::new());
         }
-        if duration.as_secs() % 60 == 0 {
+        if self.counter % 60 == 0 {
             self.stats_by_min.rotate(IterStats::new());
         }
-        if duration.as_secs() % 600 == 0 {
+        if self.counter % 600 == 0 {
             self.stats_by_10min.rotate(IterStats::new());
         }
     }
 }
 
 pub struct RotateDiffWindowGroup {
-    frame: Instant,
     interval: Duration,
     stats_last_sec: RotateWindow,
     stats_last_10sec: RotateWindow,
@@ -119,34 +108,24 @@ impl RotateDiffWindowGroup {
             &mut self.stats_last_10min,
         ]
     }
-    pub fn new(frame: Instant, fps: u8) -> Self {
+    pub fn new(fps: u8) -> Self {
         let fps = fps as usize;
         let interval = Duration::from_secs_f64(1.0 / fps as f64);
-        let frame = frame - interval;
         let mut group = Self {
-            frame,
             interval,
             stats_last_sec: RotateWindow::new(fps + 1),
             stats_last_10sec: RotateWindow::new(fps * 10 + 1),
             stats_last_min: RotateWindow::new(fps * 60 + 1),
             stats_last_10min: RotateWindow::new(fps * 600 + 1),
         };
-        group.rotate(frame, &IterStats::new());
+        group.rotate(&IterStats::new());
         group
     }
 
-    pub fn rotate(&mut self, next_frame: Instant, stats: &IterStats) {
-        if next_frame < self.frame + self.interval {
-            return;
-        }
-
-        let duration = next_frame - self.frame;
-        let frames = (duration.as_millis() / self.interval.as_millis()) as usize;
-        let buckets = repeat_with(IterStats::new).take(frames - 1).chain(once(stats.clone()));
+    pub fn rotate(&mut self, stats: &IterStats) {
         for s in self.all_stats().iter_mut() {
-            s.rotate_multi(buckets.clone());
+            s.rotate(stats.clone());
         }
-        self.frame += self.interval * frames as u32;
     }
 
     pub fn stats_last_sec(&self) -> (IterStats, Duration) {

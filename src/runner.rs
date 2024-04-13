@@ -12,17 +12,17 @@ use tokio::{
     select,
     sync::{mpsc, watch},
     task::JoinSet,
-    time::{sleep_until, Instant, MissedTickBehavior},
+    time::MissedTickBehavior,
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::report::IterReport;
+use crate::{clock::Clock, report::IterReport};
 
 /// Core options for the benchmark runner.
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct BenchOpts {
     /// Start time of the benchmark.
-    pub start: Instant,
+    pub clock: Clock,
 
     /// Number of concurrent workers.
     pub concurrency: u32,
@@ -35,12 +35,6 @@ pub struct BenchOpts {
 
     /// Rate limit for benchmarking, in iterations per second (ips).
     pub rate: Option<u32>,
-}
-
-impl BenchOpts {
-    pub(crate) fn endtime(&self) -> Option<Instant> {
-        self.duration.map(|d| self.start + d)
-    }
 }
 
 /// A trait for benchmark suites.
@@ -164,7 +158,6 @@ where
     async fn bench(self) -> Result<()> {
         let concurrency = self.opts.concurrency;
         let iterations = self.opts.iterations;
-        let endtime = self.opts.endtime();
 
         let mut set: JoinSet<Result<()>> = JoinSet::new();
         for worker in 0..concurrency {
@@ -194,10 +187,10 @@ where
             });
         }
 
-        if let Some(t) = endtime {
+        if let Some(t) = self.opts.duration {
             select! {
                 _ = self.cancel.cancelled() => (),
-                _ = sleep_until(t) => self.cancel.cancel(),
+                _ = self.opts.clock.sleep(t) => self.cancel.cancel(),
                 _ = join_all(&mut set) => (),
             }
         };
@@ -209,7 +202,8 @@ where
     async fn bench_with_rate(self, rate: u32) -> Result<()> {
         let concurrency = self.opts.concurrency;
         let iterations = self.opts.iterations;
-        let endtime = self.opts.endtime();
+        let clock = self.opts.clock.clone();
+        let duration = self.opts.duration;
         let (tx, rx) = flume::bounded(self.opts.concurrency as usize);
 
         let b = self.clone();
@@ -218,14 +212,14 @@ where
             timer.set_missed_tick_behavior(MissedTickBehavior::Burst);
             let mut iter = 0;
             loop {
-                let t = timer.tick().await;
+                timer.tick().await;
                 if b.paused() {
                     match b.cancel.is_cancelled() {
                         false => continue,
                         true => break,
                     }
                 }
-                if matches!(endtime, Some(endtime) if t >= endtime) {
+                if matches!(duration, Some(duration) if clock.elapsed() >= duration) {
                     break;
                 }
                 if matches!(iterations, Some(iterations) if iter >= iterations) {

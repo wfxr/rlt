@@ -54,7 +54,7 @@ impl super::ReportCollector for SilentCollector {
             }
         }
 
-        let elapsed = self.bench_opts.start.elapsed();
+        let elapsed = self.bench_opts.clock.elapsed();
         let concurrency = self.bench_opts.concurrency;
         Ok(BenchReport { concurrency, hist, stats, status_dist, error_dist, elapsed })
     }
