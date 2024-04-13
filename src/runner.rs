@@ -148,7 +148,8 @@ where
         if let Err(e) = &res {
             log::error!("Error in iteration({info:?}): {:?}", e);
         }
-        self.res_tx.send(res).expect("send report");
+        // safe to ignore the error which means the receiver is dropped
+        let _ = self.res_tx.send(res);
     }
 
     /// Run the benchmark.
