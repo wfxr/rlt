@@ -24,13 +24,15 @@ rlt for various services, such as Http, gRPC, Thrift, Database, or other customi
 
 ### Quick Start
 
-To use `rlt`, firstly add it as a dependency:
+Run `cargo add rlt` to add `rlt` as a dependency to your `Cargo.toml`:
 
+```toml
+[dependencies]
+rlt = "v0.1.1-rc.1"
 ```
-$ cargo add rlt
-```
+
 Then create your bench suite by implementing the `BenchSuite` trait.
-You can use `flatten` attribute provided by `clap` to embed the predefined `BenchCli` into your own.
+`flatten` attribute can be used to embed the predefined `BenchCli` into your own.
 
 ```rust
 #[derive(Parser, Clone)]
@@ -62,7 +64,7 @@ impl BenchSuite for HttpBench {
 }
 ```
 
-Note that you can create a separate struct to hold the cli options for more flexibility. There is an example in [examples/http_hyper.rs](examples/http_hyper.rs).
+*You can also create a separate struct to hold the cli options for more flexibility. There is an example in [examples/http_hyper.rs](examples/http_hyper.rs).*
 
 Finally, create the main function to run the load test:
 
