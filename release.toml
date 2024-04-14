@@ -1,4 +1,4 @@
-allow-branch = ["improve-release"]
+allow-branch = ["main"]
 pre-release-replacements = [
     { file = "README.md", search = "rlt = .*", replace = "{{crate_name}} = \"{{version}}\"" },
 ]
