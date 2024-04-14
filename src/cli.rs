@@ -92,6 +92,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    clock::Clock,
     collector::{ReportCollector, SilentCollector, TuiCollector},
     reporter::{BenchReporter, JsonReporter, TextReporter},
     runner::{BenchOpts, BenchSuite, Runner},
@@ -144,9 +145,9 @@ pub struct BenchCli {
 }
 
 impl BenchCli {
-    pub(crate) fn bench_opts(&self, start: Instant) -> BenchOpts {
+    pub(crate) fn bench_opts(&self, clock: Clock) -> BenchOpts {
         BenchOpts {
-            start,
+            clock,
             concurrency: self.concurrency,
             iterations: self.iterations,
             duration: self.duration.map(|d| d.into()),
@@ -193,8 +194,8 @@ where
     let (pause_tx, pause_rx) = watch::channel(false);
     let cancel = CancellationToken::new();
 
-    let opts = cli.bench_opts(Instant::now());
-    let runner = Runner::new(bench_suite, opts, res_tx, pause_rx, cancel.clone());
+    let opts = cli.bench_opts(Clock::start_at(Instant::now()));
+    let runner = Runner::new(bench_suite, opts.clone(), res_tx, pause_rx, cancel.clone());
 
     let mut collector: Box<dyn ReportCollector> = match cli.collector() {
         Collector::Tui => Box::new(TuiCollector::new(opts, cli.fps, res_rx, pause_tx, cancel)?),

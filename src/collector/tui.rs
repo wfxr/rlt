@@ -40,6 +40,8 @@ use crate::{
     util::{IntoAdjustedByte, TryIntoAdjustedByte},
 };
 
+const SECOND: Duration = Duration::from_secs(1);
+
 /// A report collector with real-time TUI support.
 pub struct TuiCollector {
     /// The benchmark options.
@@ -127,16 +129,16 @@ impl ReportCollector for TuiCollector {
         let mut current_tw = TimeWindow::Second;
         let mut auto_tw = true;
 
-        let start = self.bench_opts.start;
+        let mut clock = self.bench_opts.clock.clone();
 
-        let mut latest_iters = RotateWindowGroup::new(start, 60);
-        const SECOND: Duration = Duration::from_secs(1);
-        let mut latest_iters_timer = tokio::time::interval_at(start + SECOND, SECOND);
-        latest_iters_timer.set_missed_tick_behavior(MissedTickBehavior::Burst);
+        let mut latest_iters = RotateWindowGroup::new(60);
+        let mut latest_iters_ticker = clock.ticker(SECOND);
 
-        let mut latest_stats = RotateDiffWindowGroup::new(start, self.fps);
-        let mut refresh_timer = tokio::time::interval(Duration::from_secs(1) / self.fps as u32);
-        refresh_timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut latest_stats = RotateDiffWindowGroup::new(self.fps);
+        let mut latest_stats_ticker = clock.ticker(SECOND / self.fps as u32);
+
+        let mut ui_ticker = tokio::time::interval(SECOND / self.fps as u32);
+        ui_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
         #[cfg(feature = "log")]
         let mut show_logs = false;
@@ -146,9 +148,7 @@ impl ReportCollector for TuiCollector {
             loop {
                 tokio::select! {
                     biased;
-                    t = refresh_timer.tick() => {
-                        latest_stats.rotate(t, &stats);
-
+                    _ = ui_ticker.tick() => {
                         while crossterm::event::poll(Duration::from_secs(0))? {
                             use KeyCode::*;
                             if let Event::Key(KeyEvent { code, modifiers, .. }) = crossterm::event::read()? {
@@ -167,8 +167,12 @@ impl ReportCollector for TuiCollector {
                                         break 'outer;
                                     }
                                     (Char('p') | Pause, _) => {
-                                        // TODO: pause logical time instead of real time
                                         let pause = !*self.pause.borrow();
+                                        if pause {
+                                            clock.pause();
+                                        } else {
+                                            clock.resume();
+                                        }
                                         self.pause.send_replace(pause);
                                     }
                                     #[cfg(feature = "log")]
@@ -195,16 +199,20 @@ impl ReportCollector for TuiCollector {
                             }
                         }
 
-                        elapsed = t - start;
-                        current_tw = if auto_tw && !*self.pause.borrow() {
+                        elapsed = clock.elapsed();
+                        current_tw = if auto_tw {
                             *TimeWindow::variants().iter().rfind(|&&ts| elapsed > ts.into()).unwrap_or(&TimeWindow::Second)
                         } else {
                             current_tw
                         };
                         break;
                     }
-                    t = latest_iters_timer.tick() => {
-                        latest_iters.rotate(t);
+                    _ = latest_stats_ticker.tick() => {
+                        latest_stats.rotate(&stats);
+                        continue;
+                    }
+                    _ = latest_iters_ticker.tick() => {
+                        latest_iters.rotate();
                         continue;
                     }
                     r = self.res_rx.recv() => match r {
@@ -271,7 +279,7 @@ impl ReportCollector for TuiCollector {
             })?;
         }
 
-        let elapsed = start.elapsed();
+        let elapsed = clock.elapsed();
         let concurrency = self.bench_opts.concurrency;
         Ok(BenchReport { concurrency, hist, stats, status_dist, error_dist, elapsed })
     }

@@ -1512,6 +1512,7 @@ dependencies = [
  "hyper-util",
  "itertools",
  "log",
+ "parking_lot",
  "ratatui",
  "reqwest",
  "serde",

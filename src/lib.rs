@@ -52,6 +52,7 @@
 //! Stateful bench is also supported, see the [examples/http_reqwest](https://github.com/wfxr/rlt/blob/main/examples/http_reqwest.rs).
 #![deny(missing_docs)]
 
+mod clock;
 mod duration;
 mod histogram;
 mod report;
