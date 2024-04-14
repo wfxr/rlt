@@ -1493,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "rlt"
-version = "0.1.1-rc.1"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
