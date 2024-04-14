@@ -97,7 +97,7 @@ use crate::{
     runner::{BenchOpts, BenchSuite, Runner},
 };
 
-#[derive(Parser, Clone, Copy)]
+#[derive(Parser, Clone, Copy, Debug)]
 #[allow(missing_docs)]
 pub struct BenchCli {
     /// Number of workers to run concurrently
@@ -164,7 +164,7 @@ impl BenchCli {
 }
 
 /// The type of iteration report collector.
-#[derive(Copy, Clone, ValueEnum)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum Collector {
     /// TUI based collector. See [`TuiCollector`].
     Tui,
@@ -174,7 +174,7 @@ pub enum Collector {
 }
 
 /// Benchmark report format.
-#[derive(Copy, Clone, ValueEnum)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum ReportFormat {
     /// Report in plain text format. See [`TextReporter`].
     Text,
