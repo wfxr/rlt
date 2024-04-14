@@ -171,7 +171,7 @@ impl ReportCollector for TuiCollector {
                                         if pause {
                                             clock.pause();
                                         } else {
-                                            clock.run();
+                                            clock.resume();
                                         }
                                         self.pause.send_replace(pause);
                                     }

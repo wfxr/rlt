@@ -23,15 +23,15 @@ pub(crate) enum Status {
 }
 
 impl Clock {
-    pub fn start_at(start_time: Instant) -> Self {
+    pub fn start_at(instant: Instant) -> Self {
         let inner = InnerClock {
-            status: Status::Running(start_time),
+            status: Status::Running(instant),
             elapsed: Duration::default(),
         };
         Self { inner: Arc::new(Mutex::new(inner)) }
     }
 
-    pub fn run(&mut self) {
+    pub fn resume(&mut self) {
         let mut inner = self.inner.lock();
         if let Status::Paused = inner.status {
             inner.status = Status::Running(Instant::now());
@@ -83,17 +83,17 @@ impl Clock {
 #[derive(Debug, Clone)]
 pub struct Ticker {
     clock: Clock,
-    duration: Duration,
-    next: Duration,
+    interval: Duration,
+    next_tick: Duration,
 }
 
 impl Ticker {
     pub fn new(clock: Clock, duration: Duration) -> Self {
-        Self { clock, duration, next: duration }
+        Self { clock, interval: duration, next_tick: duration }
     }
 
     pub async fn tick(&mut self) {
-        self.clock.sleep_until(self.next).await;
-        self.next += self.duration;
+        self.clock.sleep_until(self.next_tick).await;
+        self.next_tick += self.interval;
     }
 }
