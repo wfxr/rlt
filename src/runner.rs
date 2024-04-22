@@ -1,10 +1,7 @@
 //! This module defines traits for stateful and stateless benchmark suites.
 use anyhow::Result;
 use async_trait::async_trait;
-use governor::{Quota, RateLimiter};
-use nonzero_ext::nonzero;
 use std::{
-    num::NonZeroU32,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -17,6 +14,14 @@ use tokio::{
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "rate_limit")] {
+        use std::num::NonZeroU32;
+        use governor::{Quota, RateLimiter};
+        use nonzero_ext::nonzero;
+    }
+}
 
 use crate::{
     clock::Clock,
@@ -39,6 +44,7 @@ pub struct BenchOpts {
     /// Duration to run the benchmark.
     pub duration: Option<Duration>,
 
+    #[cfg(feature = "rate_limit")]
     /// Rate limit for benchmarking, in iterations per second (ips).
     pub rate: Option<NonZeroU32>,
 }
@@ -144,6 +150,7 @@ where
     async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) {
         self.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
+
         #[cfg(feature = "log")]
         if let Err(e) = &res {
             log::error!("Error in iteration({info:?}): {:?}", e);
@@ -157,6 +164,7 @@ where
         let concurrency = self.opts.concurrency;
         let iterations = self.opts.iterations;
 
+        #[cfg(feature = "rate_limit")]
         let buckets = self.opts.rate.map(|r| {
             let quota = Quota::per_second(r).allow_burst(nonzero!(1u32));
             let clock = &self.opts.clock;
@@ -165,8 +173,9 @@ where
 
         let mut set: JoinSet<Result<()>> = JoinSet::new();
         for worker in 0..concurrency {
-            let mut b = self.clone();
+            #[cfg(feature = "rate_limit")]
             let buckets = buckets.clone();
+            let mut b = self.clone();
             set.spawn(async move {
                 let mut state = b.suite.state(worker).await?;
                 let mut info = IterInfo::new(worker);
@@ -181,6 +190,7 @@ where
                         }
                     }
 
+                    #[cfg(feature = "rate_limit")]
                     if let Some(buckets) = &buckets {
                         select! {
                             biased;
@@ -214,12 +224,8 @@ where
         join_all(&mut set).await
     }
 
-    fn paused(&self) -> bool {
-        *self.pause.borrow()
-    }
-
     async fn wait_if_paused(&mut self) {
-        while self.paused() {
+        while *self.pause.borrow() {
             if self.pause.changed().await.is_err() {
                 return;
             }

@@ -6,6 +6,7 @@ use tokio::time::{self, Duration, Instant};
 /// A logical clock that can be paused
 #[derive(Debug, Clone)]
 pub struct Clock {
+    #[cfg(feature = "rate_limit")]
     start: Instant,
     inner: Arc<Mutex<InnerClock>>,
 }
@@ -26,7 +27,14 @@ pub(crate) enum Status {
 impl Clock {
     pub fn start_at(start: Instant) -> Self {
         let inner = InnerClock { status: Status::Running(start), elapsed: Duration::default() };
-        Self { start, inner: Arc::new(Mutex::new(inner)) }
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "rate_limit")] {
+                Self { start, inner: Arc::new(Mutex::new(inner)) }
+            } else {
+                Self { inner: Arc::new(Mutex::new(inner)) }
+            }
+        }
     }
 
     pub fn resume(&mut self) {
@@ -77,6 +85,7 @@ impl Clock {
     }
 }
 
+#[cfg(feature = "rate_limit")]
 impl governor::clock::Clock for Clock {
     type Instant = std::time::Instant;
 
@@ -85,7 +94,7 @@ impl governor::clock::Clock for Clock {
         self.start.into_std() + elapsed
     }
 }
-
+#[cfg(feature = "rate_limit")]
 impl governor::clock::ReasonablyRealtime for Clock {}
 
 /// A ticker that ticks at a fixed logical interval

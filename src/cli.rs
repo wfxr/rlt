@@ -122,6 +122,7 @@ pub struct BenchCli {
     #[clap(long, short = 'd')]
     pub duration: Option<humantime::Duration>,
 
+    #[cfg(feature = "rate_limit")]
     /// Rate limit for benchmarking, in iterations per second (ips)
     ///
     /// When set, benchmark will try to run at the specified rate.
@@ -154,6 +155,7 @@ impl BenchCli {
             concurrency: self.concurrency.get(),
             iterations: self.iterations.map(|n| n.get()),
             duration: self.duration.map(|d| d.into()),
+            #[cfg(feature = "rate_limit")]
             rate: self.rate,
         }
     }
