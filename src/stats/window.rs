@@ -1,5 +1,6 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, num::NonZeroUsize};
 
+use nonzero_ext::nonzero;
 use tokio::time::Duration;
 
 use crate::report::IterReport;
@@ -8,13 +9,12 @@ use super::IterStats;
 
 pub struct RotateWindow {
     buckets: VecDeque<IterStats>,
-    size: usize,
+    size: NonZeroUsize,
 }
 
 impl RotateWindow {
-    fn new(size: usize) -> Self {
-        assert!(size > 0);
-        let mut win = Self { buckets: VecDeque::with_capacity(size), size };
+    fn new(size: NonZeroUsize) -> Self {
+        let mut win = Self { buckets: VecDeque::with_capacity(size.get()), size };
         win.rotate(IterStats::new());
         win
     }
@@ -25,7 +25,7 @@ impl RotateWindow {
     }
 
     fn rotate(&mut self, bucket: IterStats) {
-        if self.buckets.len() == self.size {
+        if self.buckets.len() == self.size.get() {
             self.buckets.pop_back();
         }
         self.buckets.push_front(bucket);
@@ -59,7 +59,7 @@ pub struct RotateWindowGroup {
 }
 
 impl RotateWindowGroup {
-    pub fn new(buckets: usize) -> Self {
+    pub fn new(buckets: NonZeroUsize) -> Self {
         Self {
             counter: 0,
             stats_by_sec: RotateWindow::new(buckets),
@@ -108,15 +108,14 @@ impl RotateDiffWindowGroup {
             &mut self.stats_last_10min,
         ]
     }
-    pub fn new(fps: u8) -> Self {
-        let fps = fps as usize;
-        let interval = Duration::from_secs_f64(1.0 / fps as f64);
+    pub fn new(fps: NonZeroUsize) -> Self {
+        let interval = Duration::from_secs_f64(1.0 / fps.get() as f64);
         let mut group = Self {
             interval,
-            stats_last_sec: RotateWindow::new(fps + 1),
-            stats_last_10sec: RotateWindow::new(fps * 10 + 1),
-            stats_last_min: RotateWindow::new(fps * 60 + 1),
-            stats_last_10min: RotateWindow::new(fps * 600 + 1),
+            stats_last_sec: RotateWindow::new(fps.saturating_add(1)),
+            stats_last_10sec: RotateWindow::new(fps.saturating_mul(nonzero!(10usize)).saturating_add(1)),
+            stats_last_min: RotateWindow::new(fps.saturating_mul(nonzero!(60usize)).saturating_add(1)),
+            stats_last_10min: RotateWindow::new(fps.saturating_mul(nonzero!(600usize)).saturating_add(1)),
         };
         group.rotate(&IterStats::new());
         group
