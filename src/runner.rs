@@ -1,9 +1,10 @@
 //! This module defines traits for stateful and stateless benchmark suites.
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use governor::{Quota, RateLimiter};
-use nonzero_ext::{nonzero, NonZero};
+use nonzero_ext::nonzero;
 use std::{
+    num::NonZeroU32,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -39,7 +40,7 @@ pub struct BenchOpts {
     pub duration: Option<Duration>,
 
     /// Rate limit for benchmarking, in iterations per second (ips).
-    pub rate: Option<u32>,
+    pub rate: Option<NonZeroU32>,
 }
 
 /// A trait for benchmark suites.
@@ -156,22 +157,16 @@ where
         let concurrency = self.opts.concurrency;
         let iterations = self.opts.iterations;
 
-        let rli = match self.opts.rate {
-            Some(r) => {
-                let quota = Quota::per_second(
-                    NonZero::new(r).ok_or_else(|| anyhow!("rate limit must be greater than 0, got {}", r))?,
-                )
-                .allow_burst(nonzero!(1u32));
-                let clock = &self.opts.clock;
-                Some(Arc::new(RateLimiter::direct_with_clock(quota, clock)))
-            }
-            None => None,
-        };
+        let buckets = self.opts.rate.map(|r| {
+            let quota = Quota::per_second(r).allow_burst(nonzero!(1u32));
+            let clock = &self.opts.clock;
+            Arc::new(RateLimiter::direct_with_clock(quota, clock))
+        });
 
         let mut set: JoinSet<Result<()>> = JoinSet::new();
         for worker in 0..concurrency {
             let mut b = self.clone();
-            let rli = rli.clone();
+            let buckets = buckets.clone();
             set.spawn(async move {
                 let mut state = b.suite.state(worker).await?;
                 let mut info = IterInfo::new(worker);
@@ -186,14 +181,16 @@ where
                         }
                     }
 
-                    if let Some(rli) = &rli {
+                    if let Some(buckets) = &buckets {
                         select! {
+                            biased;
                             _ = cancel.cancelled() => break,
-                            _ = rli.until_ready() => (),
+                            _ = buckets.until_ready() => (),
                         }
                     }
 
                     select! {
+                        biased;
                         _ = cancel.cancelled() => break,
                         _ = b.iteration(&mut state, &info) => (),
                     }
@@ -207,6 +204,7 @@ where
 
         if let Some(t) = self.opts.duration {
             select! {
+                biased;
                 _ = self.cancel.cancelled() => (),
                 _ = self.opts.clock.sleep(t) => self.cancel.cancel(),
                 _ = join_all(&mut set) => (),

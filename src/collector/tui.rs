@@ -6,6 +6,7 @@ use crossterm::{
     terminal, ExecutableCommand,
 };
 use itertools::Itertools;
+use nonzero_ext::nonzero;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -14,7 +15,7 @@ use ratatui::{
     widgets::{block::Title, BarChart, Block, Borders, Clear, Gauge, Padding, Paragraph},
     CompletedFrame, Frame,
 };
-use std::{collections::HashMap, fmt, io, time::Duration};
+use std::{collections::HashMap, fmt, io, num::NonZeroU8, time::Duration};
 use tokio::{
     sync::{mpsc, watch},
     time::MissedTickBehavior,
@@ -47,7 +48,7 @@ pub struct TuiCollector {
     /// The benchmark options.
     pub bench_opts: BenchOpts,
     /// Refresh rate for the tui collector, in frames per second (fps)
-    pub fps: u8,
+    pub fps: NonZeroU8,
     /// The receiver for iteration reports.
     pub res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
     /// The sender for pausing the benchmark runner.
@@ -63,7 +64,7 @@ impl TuiCollector {
     /// Create a new TUI report collector.
     pub fn new(
         bench_opts: BenchOpts,
-        fps: u8,
+        fps: NonZeroU8,
         res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
         pause: watch::Sender<bool>,
         cancel: CancellationToken,
@@ -131,13 +132,13 @@ impl ReportCollector for TuiCollector {
 
         let mut clock = self.bench_opts.clock.clone();
 
-        let mut latest_iters = RotateWindowGroup::new(60);
+        let mut latest_iters = RotateWindowGroup::new(nonzero!(60usize));
         let mut latest_iters_ticker = clock.ticker(SECOND);
 
-        let mut latest_stats = RotateDiffWindowGroup::new(self.fps);
-        let mut latest_stats_ticker = clock.ticker(SECOND / self.fps as u32);
+        let mut latest_stats = RotateDiffWindowGroup::new(self.fps.into());
+        let mut latest_stats_ticker = clock.ticker(SECOND / self.fps.get() as u32);
 
-        let mut ui_ticker = tokio::time::interval(SECOND / self.fps as u32);
+        let mut ui_ticker = tokio::time::interval(SECOND / self.fps.get() as u32);
         ui_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
         #[cfg(feature = "log")]

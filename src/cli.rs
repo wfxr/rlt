@@ -81,7 +81,10 @@
 //!
 //!   -h, --help
 //!           Print help (see a summary with '-h')
-use std::io::stdout;
+use std::{
+    io::stdout,
+    num::{NonZeroU32, NonZeroU64, NonZeroU8},
+};
 
 use clap::{Parser, ValueEnum};
 use crossterm::tty::IsTty;
@@ -102,14 +105,14 @@ use crate::{
 #[allow(missing_docs)]
 pub struct BenchCli {
     /// Number of workers to run concurrently
-    #[clap(long, short = 'c', default_value = "1", value_parser = clap::value_parser!(u32).range(1..))]
-    pub concurrency: u32,
+    #[clap(long, short = 'c', default_value = "1")]
+    pub concurrency: NonZeroU32,
 
     /// Number of iterations
     ///
     /// When set, benchmark stops after reaching the number of iterations.
-    #[clap(long, short = 'n', value_parser = clap::value_parser!(u64).range(1..))]
-    pub iterations: Option<u64>,
+    #[clap(long, short = 'n')]
+    pub iterations: Option<NonZeroU64>,
 
     /// Duration to run the benchmark
     ///
@@ -122,8 +125,8 @@ pub struct BenchCli {
     /// Rate limit for benchmarking, in iterations per second (ips)
     ///
     /// When set, benchmark will try to run at the specified rate.
-    #[clap(long, short = 'r', value_parser = clap::value_parser!(u32).range(1..))]
-    pub rate: Option<u32>,
+    #[clap(long, short = 'r')]
+    pub rate: Option<NonZeroU32>,
 
     /// Run benchmark in quiet mode
     ///
@@ -136,8 +139,8 @@ pub struct BenchCli {
     pub collector: Option<Collector>,
 
     /// Refresh rate for the tui collector, in frames per second (fps)
-    #[clap(long, default_value = "32", value_parser = clap::value_parser!(u8).range(1..))]
-    pub fps: u8,
+    #[clap(long, default_value = "32")]
+    pub fps: NonZeroU8,
 
     /// Output format for the report
     #[clap(short, long, value_enum, default_value_t = ReportFormat::Text, ignore_case = true)]
@@ -148,8 +151,8 @@ impl BenchCli {
     pub(crate) fn bench_opts(&self, clock: Clock) -> BenchOpts {
         BenchOpts {
             clock,
-            concurrency: self.concurrency,
-            iterations: self.iterations,
+            concurrency: self.concurrency.get(),
+            iterations: self.iterations.map(|n| n.get()),
             duration: self.duration.map(|d| d.into()),
             rate: self.rate,
         }
