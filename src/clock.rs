@@ -4,8 +4,9 @@ use parking_lot::Mutex;
 use tokio::time::{self, Duration, Instant};
 
 /// A logical clock that can be paused
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Clock {
+    start: Instant,
     inner: Arc<Mutex<InnerClock>>,
 }
 
@@ -23,12 +24,9 @@ pub(crate) enum Status {
 }
 
 impl Clock {
-    pub fn start_at(instant: Instant) -> Self {
-        let inner = InnerClock {
-            status: Status::Running(instant),
-            elapsed: Duration::default(),
-        };
-        Self { inner: Arc::new(Mutex::new(inner)) }
+    pub fn start_at(start: Instant) -> Self {
+        let inner = InnerClock { status: Status::Running(start), elapsed: Duration::default() };
+        Self { start, inner: Arc::new(Mutex::new(inner)) }
     }
 
     pub fn resume(&mut self) {
@@ -78,6 +76,17 @@ impl Clock {
         Ticker::new(self.clone(), duration)
     }
 }
+
+impl governor::clock::Clock for Clock {
+    type Instant = std::time::Instant;
+
+    fn now(&self) -> Self::Instant {
+        let elapsed = self.elapsed();
+        self.start.into_std() + elapsed
+    }
+}
+
+impl governor::clock::ReasonablyRealtime for Clock {}
 
 /// A ticker that ticks at a fixed logical interval
 #[derive(Debug, Clone)]
