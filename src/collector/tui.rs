@@ -31,6 +31,7 @@ cfg_if::cfg_if! {
 }
 
 use crate::{
+    clock::Clock,
     collector::ReportCollector,
     duration::DurationExt,
     histogram::{LatencyHistogram, PERCENTAGES},
@@ -120,17 +121,31 @@ impl Drop for Terminal {
 #[async_trait]
 impl ReportCollector for TuiCollector {
     async fn run(&mut self) -> Result<BenchReport> {
-        let mut terminal = Terminal::new()?;
-
+        let clock = self.bench_opts.clock.clone();
         let mut hist = LatencyHistogram::new();
         let mut stats = IterStats::new();
         let mut status_dist = HashMap::new();
         let mut error_dist = HashMap::new();
 
-        let mut current_tw = TimeWindow::Second;
-        let mut auto_tw = true;
+        self.collect(clock.clone(), &mut hist, &mut stats, &mut status_dist, &mut error_dist)
+            .await?;
 
-        let mut clock = self.bench_opts.clock.clone();
+        let elapsed = clock.elapsed();
+        let concurrency = self.bench_opts.concurrency;
+        Ok(BenchReport { concurrency, hist, stats, status_dist, error_dist, elapsed })
+    }
+}
+
+impl TuiCollector {
+    async fn collect(
+        &mut self,
+        mut clock: Clock,
+        hist: &mut LatencyHistogram,
+        stats: &mut IterStats,
+        status_dist: &mut HashMap<Status, u64>,
+        error_dist: &mut HashMap<String, u64>,
+    ) -> Result<()> {
+        let mut terminal = Terminal::new()?;
 
         let mut latest_iters = RotateWindowGroup::new(nonzero!(60usize));
         let mut latest_iters_ticker = clock.ticker(SECOND);
@@ -141,75 +156,17 @@ impl ReportCollector for TuiCollector {
         let mut ui_ticker = tokio::time::interval(SECOND / self.fps.get() as u32);
         ui_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
+        let mut tm_win = TimeWindow::Second;
         #[cfg(feature = "log")]
         let mut show_logs = false;
 
-        let mut elapsed;
-        'outer: loop {
+        loop {
             loop {
                 tokio::select! {
                     biased;
-                    _ = ui_ticker.tick() => {
-                        while crossterm::event::poll(Duration::from_secs(0))? {
-                            use KeyCode::*;
-                            if let Event::Key(KeyEvent { code, modifiers, .. }) = crossterm::event::read()? {
-                                match (code, modifiers) {
-                                    (Char('+'), _) => {
-                                        current_tw = current_tw.prev();
-                                        auto_tw = false;
-                                    }
-                                    (Char('-'), _) => {
-                                        current_tw = current_tw.next();
-                                        auto_tw = false;
-                                    }
-                                    (Char('a'), _) => auto_tw = true,
-                                    (Char('q'), _) | (Char('c'), KeyModifiers::CONTROL) => {
-                                        self.cancel.cancel();
-                                        break 'outer;
-                                    }
-                                    (Char('p') | Pause, _) => {
-                                        let pause = !*self.pause.borrow();
-                                        if pause {
-                                            clock.pause();
-                                        } else {
-                                            clock.resume();
-                                        }
-                                        self.pause.send_replace(pause);
-                                    }
-                                    #[cfg(feature = "log")]
-                                    (Char('l'), _) => show_logs = !show_logs,
-                                    #[cfg(feature = "log")]
-                                    (code, _) if show_logs => {
-                                        use TuiWidgetEvent::*;
-                                        let mut txn = |e| self.log_state.transition(e);
-                                        match code {
-                                            Char(' ')            => txn(HideKey),
-                                            PageDown | Char('f') => txn(NextPageKey),
-                                            PageUp   | Char('b') => txn(PrevPageKey),
-                                            Up                   => txn(UpKey),
-                                            Down                 => txn(DownKey),
-                                            Left                 => txn(LeftKey),
-                                            Right                => txn(RightKey),
-                                            Enter                => txn(FocusKey),
-                                            Esc                  => txn(EscapeKey),
-                                            _                    => (),
-                                        }
-                                    }
-                                    _ => (),
-                                }
-                            }
-                        }
-
-                        elapsed = clock.elapsed();
-                        current_tw = if auto_tw {
-                            *TimeWindow::variants().iter().rfind(|&&ts| elapsed > ts.into()).unwrap_or(&TimeWindow::Second)
-                        } else {
-                            current_tw
-                        };
-                        break;
-                    }
+                    _ = ui_ticker.tick() => break,
                     _ = latest_stats_ticker.tick() => {
-                        latest_stats.rotate(&stats);
+                        latest_stats.rotate(stats);
                         continue;
                     }
                     _ = latest_iters_ticker.tick() => {
@@ -221,12 +178,26 @@ impl ReportCollector for TuiCollector {
                             *status_dist.entry(report.status).or_default() += 1;
                             hist.record(report.duration)?;
                             latest_iters.push(&report);
-                            stats += &report;
+                            *stats += &report;
                         }
                         Some(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
-                        None => break 'outer,
+                        None => return Ok(()),
                     }
                 };
+            }
+
+            let elapsed = clock.elapsed();
+            let exit = self
+                .handle_event(
+                    elapsed,
+                    &mut tm_win,
+                    &mut clock,
+                    #[cfg(feature = "log")]
+                    &mut show_logs,
+                )
+                .await?;
+            if exit {
+                return Ok(());
             }
 
             terminal.draw(|f| {
@@ -266,23 +237,79 @@ impl ReportCollector for TuiCollector {
                 let paused = *self.pause.borrow();
                 render_process_gauge(f, rows[3], &stats.counter, elapsed, &self.bench_opts, paused);
                 render_stats_overall(f, mid[1], &stats.counter, elapsed);
-                render_stats_timewin(f, mid[0], &latest_stats, current_tw);
-                render_status_dist(f, mid[2], &status_dist);
-                render_error_dist(f, rows[1], &error_dist);
-                render_iter_hist(f, bot[0], &latest_iters, current_tw);
-                render_latency_hist(f, bot[1], &hist, 7);
+                render_stats_timewin(f, mid[0], &latest_stats, tm_win);
+                render_status_dist(f, mid[2], status_dist);
+                render_error_dist(f, rows[1], error_dist);
+                render_iter_hist(f, bot[0], &latest_iters, tm_win);
+                render_latency_hist(f, bot[1], hist, 7);
                 render_tips(f, rows[4]);
 
                 #[cfg(feature = "log")]
-                if show_logs {
-                    tui_log::render_logs(f, &self.log_state);
-                }
+                render_logs(f, &self.log_state, show_logs);
             })?;
         }
+    }
 
-        let elapsed = clock.elapsed();
-        let concurrency = self.bench_opts.concurrency;
-        Ok(BenchReport { concurrency, hist, stats, status_dist, error_dist, elapsed })
+    async fn handle_event(
+        &mut self,
+        elapsed: Duration,
+        tm_win: &mut TimeWindow,
+        clock: &mut Clock,
+        #[cfg(feature = "log")] show_logs: &mut bool,
+    ) -> Result<bool> {
+        while crossterm::event::poll(Duration::from_secs(0))? {
+            use KeyCode::*;
+            if let Event::Key(KeyEvent { code, modifiers, .. }) = crossterm::event::read()? {
+                match (code, modifiers) {
+                    (Char('+'), _) => {
+                        *tm_win = tm_win.prev();
+                    }
+                    (Char('-'), _) => {
+                        *tm_win = tm_win.next();
+                    }
+                    (Char('a'), _) => {
+                        *tm_win = *TimeWindow::variants()
+                            .iter()
+                            .rfind(|&&ts| elapsed > ts.into())
+                            .unwrap_or(&TimeWindow::Second)
+                    }
+                    (Char('q'), _) | (Char('c'), KeyModifiers::CONTROL) => {
+                        self.cancel.cancel();
+                        return Ok(true);
+                    }
+                    (Char('p') | Pause, _) => {
+                        let pause = !*self.pause.borrow();
+                        if pause {
+                            clock.pause();
+                        } else {
+                            clock.resume();
+                        }
+                        self.pause.send_replace(pause);
+                    }
+                    #[cfg(feature = "log")]
+                    (Char('l'), _) => *show_logs = !*show_logs,
+                    #[cfg(feature = "log")]
+                    (code, _) if *show_logs => {
+                        use TuiWidgetEvent::*;
+                        let mut txn = |e| self.log_state.transition(e);
+                        match code {
+                            Char(' ') => txn(HideKey),
+                            PageDown | Char('f') => txn(NextPageKey),
+                            PageUp | Char('b') => txn(PrevPageKey),
+                            Up => txn(UpKey),
+                            Down => txn(DownKey),
+                            Left => txn(LeftKey),
+                            Right => txn(RightKey),
+                            Enter => txn(FocusKey),
+                            Esc => txn(EscapeKey),
+                            _ => (),
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+        Ok(false)
     }
 }
 
@@ -625,61 +652,60 @@ impl TimeWindow {
 }
 
 #[cfg(feature = "log")]
-mod tui_log {
-    use super::*;
-
-    #[cfg(feature = "log")]
-    pub(crate) fn render_logs(frame: &mut Frame, log_state: &TuiWidgetState) {
-        let log_widget = TuiLoggerSmartWidget::default()
-            .style_error(Style::default().fg(Color::Red))
-            .style_debug(Style::default().fg(Color::Green))
-            .style_warn(Style::default().fg(Color::Yellow))
-            .style_trace(Style::default().fg(Color::Magenta))
-            .style_info(Style::default().fg(Color::Cyan))
-            .border_type(ratatui::widgets::BorderType::Rounded)
-            .output_separator('|')
-            .output_level(Some(TuiLoggerLevelOutput::Abbreviated))
-            .output_target(true)
-            .output_file(true)
-            .output_line(true)
-            .title_log("Logs")
-            .title_target("Selector")
-            .state(log_state);
-
-        let area = centered_rect(80, 80, frame.size());
-        let rows = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(100), Constraint::Min(1)])
-            .split(area.inner(&Margin::new(1, 1)));
-        let tips = gen_tips([
-            ("Enter", "Focus target"),
-            ("↑/↓", "Select target"),
-            ("←/→", "Display level"),
-            ("f/b", "Scroll"),
-            ("Esc", "Cancel scroll"),
-            ("Space", "Hide selector"),
-        ])
-        .right_aligned();
-
-        frame.render_widget(Clear, area);
-        frame.render_widget(log_widget, rows[0]);
-        frame.render_widget(tips, rows[1].inner(&Margin::new(1, 0)));
+pub(crate) fn render_logs(frame: &mut Frame, log_state: &TuiWidgetState, show_logs: bool) {
+    if !show_logs {
+        return;
     }
 
-    #[cfg(feature = "log")]
-    pub(crate) fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-        let popup_layout = Layout::vertical([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
+    let log_widget = TuiLoggerSmartWidget::default()
+        .style_error(Style::default().fg(Color::Red))
+        .style_debug(Style::default().fg(Color::Green))
+        .style_warn(Style::default().fg(Color::Yellow))
+        .style_trace(Style::default().fg(Color::Magenta))
+        .style_info(Style::default().fg(Color::Cyan))
+        .border_type(ratatui::widgets::BorderType::Rounded)
+        .output_separator('|')
+        .output_level(Some(TuiLoggerLevelOutput::Abbreviated))
+        .output_target(true)
+        .output_file(true)
+        .output_line(true)
+        .title_log("Logs")
+        .title_target("Selector")
+        .state(log_state);
 
-        Layout::horizontal([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-    }
+    let area = centered_rect(80, 80, frame.size());
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(100), Constraint::Min(1)])
+        .split(area.inner(&Margin::new(1, 1)));
+    let tips = gen_tips([
+        ("Enter", "Focus target"),
+        ("↑/↓", "Select target"),
+        ("←/→", "Display level"),
+        ("f/b", "Scroll"),
+        ("Esc", "Cancel scroll"),
+        ("Space", "Hide selector"),
+    ])
+    .right_aligned();
+
+    frame.render_widget(Clear, area);
+    frame.render_widget(log_widget, rows[0]);
+    frame.render_widget(tips, rows[1].inner(&Margin::new(1, 0)));
+}
+
+#[cfg(feature = "log")]
+pub(crate) fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::vertical([
+        Constraint::Percentage((100 - percent_y) / 2),
+        Constraint::Percentage(percent_y),
+        Constraint::Percentage((100 - percent_y) / 2),
+    ])
+    .split(r);
+
+    Layout::horizontal([
+        Constraint::Percentage((100 - percent_x) / 2),
+        Constraint::Percentage(percent_x),
+        Constraint::Percentage((100 - percent_x) / 2),
+    ])
+    .split(popup_layout[1])[1]
 }
