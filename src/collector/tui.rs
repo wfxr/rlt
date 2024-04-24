@@ -22,16 +22,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "log")] {
-        use std::str::FromStr;
-        use log::LevelFilter;
-        use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget, TuiWidgetEvent, TuiWidgetState};
-    }
-}
-
 use crate::{
-    clock::Clock,
     collector::ReportCollector,
     duration::DurationExt,
     histogram::{LatencyHistogram, PERCENTAGES},
@@ -56,9 +47,18 @@ pub struct TuiCollector {
     pub pause: watch::Sender<bool>,
     /// The cancellation token for the benchmark runner.
     pub cancel: CancellationToken,
+    /// Whether to quit the benchmark automatically when finished.
+    pub auto_quit: bool,
 
+    /// The internal state of the TUI collector.
+    state: TuiCollectorState,
+}
+
+struct TuiCollectorState {
+    tm_win: TimeWindow,
+    finished: bool,
     #[cfg(feature = "log")]
-    log_state: TuiWidgetState,
+    log: tui_log::LogState,
 }
 
 impl TuiCollector {
@@ -69,21 +69,15 @@ impl TuiCollector {
         res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
         pause: watch::Sender<bool>,
         cancel: CancellationToken,
+        auto_quit: bool,
     ) -> Result<Self> {
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "log")] {
-                let log_level = match std::env::var("RUST_LOG") {
-                    Ok(log_level) => LevelFilter::from_str(&log_level).unwrap_or(LevelFilter::Info),
-                    Err(_) => LevelFilter::Info,
-                };
-                tui_logger::init_logger(log_level).map_err(|e| anyhow::anyhow!(e))?;
-                tui_logger::set_default_level(log_level);
-                let log_state = TuiWidgetState::new().set_default_display_level(log_level);
-                Ok(Self { bench_opts, fps, res_rx, pause, cancel, log_state })
-            } else {
-                Ok(Self { bench_opts, fps, res_rx, pause, cancel })
-            }
-        }
+        let state = TuiCollectorState {
+            tm_win: TimeWindow::Second,
+            finished: false,
+            #[cfg(feature = "log")]
+            log: tui_log::LogState::from_env()?,
+        };
+        Ok(Self { bench_opts, fps, res_rx, pause, cancel, auto_quit, state })
     }
 }
 
@@ -121,16 +115,15 @@ impl Drop for Terminal {
 #[async_trait]
 impl ReportCollector for TuiCollector {
     async fn run(&mut self) -> Result<BenchReport> {
-        let clock = self.bench_opts.clock.clone();
         let mut hist = LatencyHistogram::new();
         let mut stats = IterStats::new();
         let mut status_dist = HashMap::new();
         let mut error_dist = HashMap::new();
 
-        self.collect(clock.clone(), &mut hist, &mut stats, &mut status_dist, &mut error_dist)
+        self.collect(&mut hist, &mut stats, &mut status_dist, &mut error_dist)
             .await?;
 
-        let elapsed = clock.elapsed();
+        let elapsed = self.bench_opts.clock.elapsed();
         let concurrency = self.bench_opts.concurrency;
         Ok(BenchReport { concurrency, hist, stats, status_dist, error_dist, elapsed })
     }
@@ -139,12 +132,12 @@ impl ReportCollector for TuiCollector {
 impl TuiCollector {
     async fn collect(
         &mut self,
-        mut clock: Clock,
         hist: &mut LatencyHistogram,
         stats: &mut IterStats,
         status_dist: &mut HashMap<Status, u64>,
         error_dist: &mut HashMap<String, u64>,
     ) -> Result<()> {
+        let mut clock = self.bench_opts.clock.clone();
         let mut terminal = Terminal::new()?;
 
         let mut latest_iters = RotateWindowGroup::new(nonzero!(60usize));
@@ -156,47 +149,45 @@ impl TuiCollector {
         let mut ui_ticker = tokio::time::interval(SECOND / self.fps.get() as u32);
         ui_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
-        let mut tm_win = TimeWindow::Second;
-        #[cfg(feature = "log")]
-        let mut show_logs = false;
-
         loop {
-            loop {
-                tokio::select! {
-                    biased;
-                    _ = ui_ticker.tick() => break,
-                    _ = latest_stats_ticker.tick() => {
-                        latest_stats.rotate(stats);
-                        continue;
-                    }
-                    _ = latest_iters_ticker.tick() => {
-                        latest_iters.rotate();
-                        continue;
-                    }
-                    r = self.res_rx.recv() => match r {
-                        Some(Ok(report)) => {
-                            *status_dist.entry(report.status).or_default() += 1;
-                            hist.record(report.duration)?;
-                            latest_iters.push(&report);
-                            *stats += &report;
+            if self.state.finished {
+                if self.auto_quit {
+                    return Ok(());
+                }
+                ui_ticker.tick().await;
+            } else {
+                loop {
+                    tokio::select! {
+                        biased;
+                        _ = ui_ticker.tick() => break,
+                        _ = latest_stats_ticker.tick() => {
+                            latest_stats.rotate(stats);
+                            continue;
                         }
-                        Some(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
-                        None => return Ok(()),
-                    }
-                };
+                        _ = latest_iters_ticker.tick() => {
+                            latest_iters.rotate();
+                            continue;
+                        }
+                        r = self.res_rx.recv() => match r {
+                            Some(Ok(report)) => {
+                                *status_dist.entry(report.status).or_default() += 1;
+                                hist.record(report.duration)?;
+                                latest_iters.push(&report);
+                                *stats += &report;
+                            }
+                            Some(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
+                            None => {
+                                clock.pause();
+                                self.state.finished = true;
+                                break;
+                            }
+                        }
+                    };
+                }
             }
 
             let elapsed = clock.elapsed();
-            let exit = self
-                .handle_event(
-                    elapsed,
-                    &mut tm_win,
-                    &mut clock,
-                    #[cfg(feature = "log")]
-                    &mut show_logs,
-                )
-                .await?;
-            if exit {
+            if self.handle_event(elapsed).await? {
                 return Ok(());
             }
 
@@ -235,40 +226,37 @@ impl TuiCollector {
                     .split(rows[2]);
 
                 let paused = *self.pause.borrow();
-                render_process_gauge(f, rows[3], &stats.counter, elapsed, &self.bench_opts, paused);
+                let finished = self.state.finished;
+                render_process_gauge(f, rows[3], &stats.counter, elapsed, &self.bench_opts, paused, finished);
                 render_stats_overall(f, mid[1], &stats.counter, elapsed);
-                render_stats_timewin(f, mid[0], &latest_stats, tm_win);
+                render_stats_timewin(f, mid[0], &latest_stats, self.state.tm_win);
                 render_status_dist(f, mid[2], status_dist);
                 render_error_dist(f, rows[1], error_dist);
-                render_iter_hist(f, bot[0], &latest_iters, tm_win);
+                render_iter_hist(f, bot[0], &latest_iters, self.state.tm_win);
                 render_latency_hist(f, bot[1], hist, 7);
                 render_tips(f, rows[4]);
 
                 #[cfg(feature = "log")]
-                render_logs(f, &self.log_state, show_logs);
+                tui_log::render_logs(f, &self.state.log);
             })?;
         }
     }
 
-    async fn handle_event(
-        &mut self,
-        elapsed: Duration,
-        tm_win: &mut TimeWindow,
-        clock: &mut Clock,
-        #[cfg(feature = "log")] show_logs: &mut bool,
-    ) -> Result<bool> {
+    /// Handle the user input events. Returns `true` if the collector should quit.
+    async fn handle_event(&mut self, elapsed: Duration) -> Result<bool> {
+        let clock = &mut self.bench_opts.clock;
         while crossterm::event::poll(Duration::from_secs(0))? {
             use KeyCode::*;
             if let Event::Key(KeyEvent { code, modifiers, .. }) = crossterm::event::read()? {
                 match (code, modifiers) {
                     (Char('+'), _) => {
-                        *tm_win = tm_win.prev();
+                        self.state.tm_win = self.state.tm_win.prev();
                     }
                     (Char('-'), _) => {
-                        *tm_win = tm_win.next();
+                        self.state.tm_win = self.state.tm_win.next();
                     }
                     (Char('a'), _) => {
-                        *tm_win = *TimeWindow::variants()
+                        self.state.tm_win = *TimeWindow::variants()
                             .iter()
                             .rfind(|&&ts| elapsed > ts.into())
                             .unwrap_or(&TimeWindow::Second)
@@ -277,7 +265,7 @@ impl TuiCollector {
                         self.cancel.cancel();
                         return Ok(true);
                     }
-                    (Char('p') | Pause, _) => {
+                    (Char('p') | Pause, _) if !self.state.finished => {
                         let pause = !*self.pause.borrow();
                         if pause {
                             clock.pause();
@@ -287,11 +275,11 @@ impl TuiCollector {
                         self.pause.send_replace(pause);
                     }
                     #[cfg(feature = "log")]
-                    (Char('l'), _) => *show_logs = !*show_logs,
+                    (Char('l'), _) => self.state.log.display = !self.state.log.display,
                     #[cfg(feature = "log")]
-                    (code, _) if *show_logs => {
-                        use TuiWidgetEvent::*;
-                        let mut txn = |e| self.log_state.transition(e);
+                    (code, _) if self.state.log.display => {
+                        use tui_logger::TuiWidgetEvent::*;
+                        let mut txn = |e| self.state.log.inner.transition(e);
                         match code {
                             Char(' ') => txn(HideKey),
                             PageDown | Char('f') => txn(NextPageKey),
@@ -389,6 +377,7 @@ fn render_process_gauge(
     elapsed: Duration,
     opts: &BenchOpts,
     paused: bool,
+    finished: bool,
 ) {
     let rounded = |duration: Duration| humantime::Duration::from(Duration::from_secs(duration.as_secs_f64() as u64));
     let time_progress = |duration: &Duration| {
@@ -419,13 +408,21 @@ fn render_process_gauge(
         }
     };
 
-    if paused {
-        label.push_str(" (PAUSED)");
-    }
+    let style = match (finished, paused) {
+        (true, _) => {
+            label.push_str(" (FINISHED)");
+            Style::new().fg(Color::Yellow)
+        }
+        (_, true) => {
+            label.push_str(" (PAUSED)");
+            Style::new().fg(Color::Yellow)
+        }
+        (false, false) => Style::new().fg(Color::Cyan),
+    };
 
     let guage = Gauge::default()
         .block(Block::new().title("Progress").borders(Borders::ALL))
-        .gauge_style(Style::new().fg(Color::Cyan))
+        .gauge_style(style)
         .label(label)
         .ratio(progress);
     frame.render_widget(guage, area);
@@ -652,60 +649,85 @@ impl TimeWindow {
 }
 
 #[cfg(feature = "log")]
-pub(crate) fn render_logs(frame: &mut Frame, log_state: &TuiWidgetState, show_logs: bool) {
-    if !show_logs {
-        return;
+mod tui_log {
+    use super::*;
+
+    use log::LevelFilter;
+    use std::str::FromStr;
+    use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget, TuiWidgetState};
+
+    pub(crate) struct LogState {
+        pub(crate) inner: TuiWidgetState,
+        pub(crate) display: bool,
     }
 
-    let log_widget = TuiLoggerSmartWidget::default()
-        .style_error(Style::default().fg(Color::Red))
-        .style_debug(Style::default().fg(Color::Green))
-        .style_warn(Style::default().fg(Color::Yellow))
-        .style_trace(Style::default().fg(Color::Magenta))
-        .style_info(Style::default().fg(Color::Cyan))
-        .border_type(ratatui::widgets::BorderType::Rounded)
-        .output_separator('|')
-        .output_level(Some(TuiLoggerLevelOutput::Abbreviated))
-        .output_target(true)
-        .output_file(true)
-        .output_line(true)
-        .title_log("Logs")
-        .title_target("Selector")
-        .state(log_state);
+    impl LogState {
+        pub(crate) fn from_env() -> Result<Self> {
+            let log_level = match std::env::var("RUST_LOG") {
+                Ok(log_level) => LevelFilter::from_str(&log_level).unwrap_or(LevelFilter::Info),
+                Err(_) => LevelFilter::Info,
+            };
+            tui_logger::init_logger(log_level).map_err(|e| anyhow::anyhow!(e))?;
+            tui_logger::set_default_level(log_level);
+            let state = TuiWidgetState::new().set_default_display_level(log_level);
+            Ok(Self { inner: state, display: false })
+        }
+    }
 
-    let area = centered_rect(80, 80, frame.size());
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(100), Constraint::Min(1)])
-        .split(area.inner(&Margin::new(1, 1)));
-    let tips = gen_tips([
-        ("Enter", "Focus target"),
-        ("↑/↓", "Select target"),
-        ("←/→", "Display level"),
-        ("f/b", "Scroll"),
-        ("Esc", "Cancel scroll"),
-        ("Space", "Hide selector"),
-    ])
-    .right_aligned();
+    pub(crate) fn render_logs(frame: &mut Frame, state: &LogState) {
+        if !state.display {
+            return;
+        }
 
-    frame.render_widget(Clear, area);
-    frame.render_widget(log_widget, rows[0]);
-    frame.render_widget(tips, rows[1].inner(&Margin::new(1, 0)));
-}
+        let log_widget = TuiLoggerSmartWidget::default()
+            .style_error(Style::default().fg(Color::Red))
+            .style_debug(Style::default().fg(Color::Green))
+            .style_warn(Style::default().fg(Color::Yellow))
+            .style_trace(Style::default().fg(Color::Magenta))
+            .style_info(Style::default().fg(Color::Cyan))
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .output_separator('|')
+            .output_level(Some(TuiLoggerLevelOutput::Abbreviated))
+            .output_target(true)
+            .output_file(true)
+            .output_line(true)
+            .title_log("Logs")
+            .title_target("Selector")
+            .state(&state.inner);
 
-#[cfg(feature = "log")]
-pub(crate) fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::vertical([
-        Constraint::Percentage((100 - percent_y) / 2),
-        Constraint::Percentage(percent_y),
-        Constraint::Percentage((100 - percent_y) / 2),
-    ])
-    .split(r);
+        let area = centered_rect(80, 80, frame.size());
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(100), Constraint::Min(1)])
+            .split(area.inner(&Margin::new(1, 1)));
+        let tips = gen_tips([
+            ("Enter", "Focus target"),
+            ("↑/↓", "Select target"),
+            ("←/→", "Display level"),
+            ("f/b", "Scroll"),
+            ("Esc", "Cancel scroll"),
+            ("Space", "Hide selector"),
+        ])
+        .right_aligned();
 
-    Layout::horizontal([
-        Constraint::Percentage((100 - percent_x) / 2),
-        Constraint::Percentage(percent_x),
-        Constraint::Percentage((100 - percent_x) / 2),
-    ])
-    .split(popup_layout[1])[1]
+        frame.render_widget(Clear, area);
+        frame.render_widget(log_widget, rows[0]);
+        frame.render_widget(tips, rows[1].inner(&Margin::new(1, 0)));
+    }
+
+    pub(crate) fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+        let popup_layout = Layout::vertical([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+        Layout::horizontal([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+    }
 }

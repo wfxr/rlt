@@ -143,6 +143,12 @@ pub struct BenchCli {
     #[clap(long, default_value = "32")]
     pub fps: NonZeroU8,
 
+    /// Quit the benchmark manually
+    ///
+    /// Only works with the TUI collector.
+    #[clap(long)]
+    pub quit_manually: bool,
+
     /// Output format for the report
     #[clap(short, long, value_enum, default_value_t = ReportFormat::Text, ignore_case = true)]
     pub output: ReportFormat,
@@ -203,7 +209,14 @@ where
     let runner = Runner::new(bench_suite, opts.clone(), res_tx, pause_rx, cancel.clone());
 
     let mut collector: Box<dyn ReportCollector> = match cli.collector() {
-        Collector::Tui => Box::new(TuiCollector::new(opts, cli.fps, res_rx, pause_tx, cancel)?),
+        Collector::Tui => Box::new(TuiCollector::new(
+            opts,
+            cli.fps,
+            res_rx,
+            pause_tx,
+            cancel,
+            !cli.quit_manually,
+        )?),
         Collector::Silent => Box::new(SilentCollector::new(opts, res_rx, cancel)),
     };
 
