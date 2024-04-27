@@ -19,8 +19,8 @@ name = "rlt"
 path = "src/lib.rs"
 
 [features]
-default = ["log", "rate_limit", "http"]
-log = ["dep:log", "dep:tracing", "dep:tui-logger"]
+default = ["tracing", "rate_limit", "http"]
+tracing = ["dep:log", "dep:tracing", "dep:tui-logger"]
 rate_limit = ["dep:governor"]
 http = ["dep:http"]
 

@@ -151,7 +151,7 @@ where
         self.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
 
-        #[cfg(feature = "log")]
+        #[cfg(feature = "tracing")]
         if let Err(e) = &res {
             log::error!("Error in iteration({info:?}): {:?}", e);
         }

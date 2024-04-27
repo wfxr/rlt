@@ -73,5 +73,5 @@ pub use crate::{
     status::{Status, StatusKind},
 };
 
-#[cfg(feature = "log")]
+#[cfg(feature = "tracing")]
 pub use tui_logger::tracing_subscriber_layer as tui_tracing_subscriber_layer;

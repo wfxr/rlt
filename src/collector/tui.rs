@@ -57,7 +57,7 @@ pub struct TuiCollector {
 struct TuiCollectorState {
     tm_win: TimeWindow,
     finished: bool,
-    #[cfg(feature = "log")]
+    #[cfg(feature = "tracing")]
     log: tui_log::LogState,
 }
 
@@ -74,7 +74,7 @@ impl TuiCollector {
         let state = TuiCollectorState {
             tm_win: TimeWindow::Second,
             finished: false,
-            #[cfg(feature = "log")]
+            #[cfg(feature = "tracing")]
             log: tui_log::LogState::from_env()?,
         };
         Ok(Self { bench_opts, fps, res_rx, pause, cancel, auto_quit, state })
@@ -236,7 +236,7 @@ impl TuiCollector {
                 render_latency_hist(f, bot[1], hist, 7);
                 render_tips(f, rows[4]);
 
-                #[cfg(feature = "log")]
+                #[cfg(feature = "tracing")]
                 tui_log::render_logs(f, &self.state.log);
             })?;
         }
@@ -274,9 +274,9 @@ impl TuiCollector {
                         }
                         self.pause.send_replace(pause);
                     }
-                    #[cfg(feature = "log")]
+                    #[cfg(feature = "tracing")]
                     (Char('l'), _) => self.state.log.display = !self.state.log.display,
-                    #[cfg(feature = "log")]
+                    #[cfg(feature = "tracing")]
                     (code, _) if self.state.log.display => {
                         use tui_logger::TuiWidgetEvent::*;
                         let mut txn = |e| self.state.log.inner.transition(e);
@@ -583,7 +583,7 @@ fn render_tips(frame: &mut Frame, area: Rect) {
     let tips = gen_tips([
         ("+/-", "Zoom in/out"),
         ("a", "Auto time window"),
-        #[cfg(feature = "log")]
+        #[cfg(feature = "tracing")]
         ("l", "Logs window"),
         ("p", "Pause"),
         ("q", "Quit"),
@@ -648,7 +648,7 @@ impl TimeWindow {
     }
 }
 
-#[cfg(feature = "log")]
+#[cfg(feature = "tracing")]
 mod tui_log {
     use super::*;
 
