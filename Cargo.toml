@@ -19,10 +19,10 @@ name = "rlt"
 path = "src/lib.rs"
 
 [features]
-default = ["http", "rate_limit"]
-http = ["dep:http"]
-log = ["dep:log", "dep:tui-logger"]
+default = ["log", "rate_limit", "http"]
+log = ["dep:log", "dep:tracing", "dep:tui-logger"]
 rate_limit = ["dep:governor"]
+http = ["dep:http"]
 
 [dependencies]
 anyhow = "1"
@@ -41,13 +41,17 @@ async-trait = "0.1"
 hdrhistogram = "7.5"
 itertools = "0.12"
 tabled = "0.15"
-http = { version = "1.1", optional = true }
-tui-logger = { version = "0.11", optional = true }
-log = { version = "0.4", optional = true }
 cfg-if = "1"
 parking_lot = "0.12"
-governor = { version = "0.6", optional = true }
 nonzero_ext = "0.3"
+
+http = { version = "1.1", optional = true }
+governor = { version = "0.6", optional = true }
+log = { version = "0.4", optional = true }
+tracing = { version = "0.1", optional = true }
+tui-logger = { version = "0.11", optional = true, features = [
+    "tracing-support",
+] }
 
 [dev-dependencies]
 tokio = { version = "1.36", features = ["rt-multi-thread"] }
@@ -63,3 +67,4 @@ hyper-util = { version = "0.1", features = [
 ] }
 reqwest = "0.12"
 tokio-postgres = "0.7"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -72,3 +72,6 @@ pub use crate::{
     runner::{BenchSuite, StatelessBenchSuite},
     status::{Status, StatusKind},
 };
+
+#[cfg(feature = "log")]
+pub use tui_logger::tracing_subscriber_layer as tui_tracing_subscriber_layer;

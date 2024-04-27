@@ -653,7 +653,6 @@ mod tui_log {
     use super::*;
 
     use log::LevelFilter;
-    use std::str::FromStr;
     use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget, TuiWidgetState};
 
     pub(crate) struct LogState {
@@ -663,13 +662,8 @@ mod tui_log {
 
     impl LogState {
         pub(crate) fn from_env() -> Result<Self> {
-            let log_level = match std::env::var("RUST_LOG") {
-                Ok(log_level) => LevelFilter::from_str(&log_level).unwrap_or(LevelFilter::Info),
-                Err(_) => LevelFilter::Info,
-            };
-            tui_logger::init_logger(log_level).map_err(|e| anyhow::anyhow!(e))?;
-            tui_logger::set_default_level(log_level);
-            let state = TuiWidgetState::new().set_default_display_level(log_level);
+            tui_logger::set_default_level(LevelFilter::Trace);
+            let state = TuiWidgetState::new().set_default_display_level(LevelFilter::Info);
             Ok(Self { inner: state, display: false })
         }
     }
