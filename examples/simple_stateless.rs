@@ -29,12 +29,6 @@ impl StatelessBenchSuite for SimpleBench {
         // simulate items processed in current iteration
         let items = info.worker_seq % 100;
 
-        #[cfg(feature = "log")]
-        // press `l` to see log output
-        if status.kind() != rlt::StatusKind::Success {
-            log::warn!("duration: {:?}, status: {}, items: {}", duration, status, items);
-        }
-
         Ok(IterReport { duration, status, bytes: items * 1024, items })
     }
 }

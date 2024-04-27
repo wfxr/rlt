@@ -166,7 +166,8 @@ impl BenchCli {
         }
     }
 
-    pub(crate) fn collector(&self) -> Collector {
+    /// Get the actual collector type.
+    pub fn collector(&self) -> Collector {
         match self.collector {
             Some(collector) => collector,
             None if self.quiet || !stdout().is_tty() => Collector::Silent,
