@@ -529,7 +529,7 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
         return;
     }
 
-    let area = area.inner(&Margin::new(1, 1));
+    let area = area.inner(Margin::new(1, 1));
     let area = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
     let area = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area[1]);
     let area = area[0];
@@ -589,7 +589,7 @@ fn render_tips(frame: &mut Frame, area: Rect) {
         ("q", "Quit"),
     ])
     .right_aligned();
-    frame.render_widget(tips, area.inner(&Margin::new(1, 0)));
+    frame.render_widget(tips, area.inner(Margin::new(1, 0)));
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -693,7 +693,7 @@ mod tui_log {
         let rows = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(100), Constraint::Min(1)])
-            .split(area.inner(&Margin::new(1, 1)));
+            .split(area.inner(Margin::new(1, 1)));
         let tips = gen_tips([
             ("Enter", "Focus target"),
             ("↑/↓", "Select target"),
@@ -706,7 +706,7 @@ mod tui_log {
 
         frame.render_widget(Clear, area);
         frame.render_widget(log_widget, rows[0]);
-        frame.render_widget(tips, rows[1].inner(&Margin::new(1, 0)));
+        frame.render_widget(tips, rows[1].inner(Margin::new(1, 0)));
     }
 
     pub(crate) fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
