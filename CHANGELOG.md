@@ -1,5 +1,16 @@
 
-## [0.2.0](https://github.com/wfxr/rlt/compare/v0.1.1..0.2.0) (2024-08-12)
+## [0.2.1](https://github.com/wfxr/rlt/compare/v0.2.0..0.2.1) (2024-12-28)
+
+### 🚀 Features
+
+- Add colored styles by default - ([1e068b5](https://github.com/wfxr/rlt/commit/1e068b569288f700bffd475f9d701fa837329e17))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump up dependencies - ([db56dbf](https://github.com/wfxr/rlt/commit/db56dbf10aac640d9e700a2798d5715fcf8a5d08))
+- Bump up dependencies - ([0a067be](https://github.com/wfxr/rlt/commit/0a067be18a08de276f7cc4bc85cc0e73b81417da))
+
+## [0.2.0](https://github.com/wfxr/rlt/compare/v0.1.1..v0.2.0) (2024-08-12)
 
 ### 🚀 Features
 
