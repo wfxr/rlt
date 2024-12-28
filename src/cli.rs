@@ -86,7 +86,13 @@ use std::{
     num::{NonZeroU32, NonZeroU64, NonZeroU8},
 };
 
-use clap::{Parser, ValueEnum};
+use clap::{
+    builder::{
+        styling::{AnsiColor, Effects},
+        Styles,
+    },
+    Parser, ValueEnum,
+};
 use crossterm::tty::IsTty;
 use tokio::{
     sync::{mpsc, watch},
@@ -102,6 +108,14 @@ use crate::{
 };
 
 #[derive(Parser, Clone, Copy, Debug)]
+#[clap(
+    styles(Styles::styled()
+        .header(AnsiColor::Yellow.on_default() | Effects::BOLD)
+        .usage(AnsiColor::Yellow.on_default() | Effects::BOLD)
+        .literal(AnsiColor::Green.on_default() | Effects::BOLD)
+        .placeholder(AnsiColor::Cyan.on_default())
+    )
+)]
 #[allow(missing_docs)]
 pub struct BenchCli {
     /// Number of workers to run concurrently
