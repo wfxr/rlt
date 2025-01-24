@@ -46,7 +46,7 @@
 //!
 //!           When set, benchmark stops after reaching the duration.
 //!
-//!           Examples: -z 10s, -z 5m, -z 1h
+//!           Examples: -d 10s, -d 5m, -d 1h
 //!
 //!   -r, --rate <RATE>
 //!           Rate limit for benchmarking, in iterations per second (ips)
@@ -132,7 +132,7 @@ pub struct BenchCli {
     ///
     /// When set, benchmark stops after reaching the duration.
     ///
-    /// Examples: -z 10s, -z 5m, -z 1h
+    /// Examples: -d 10s, -d 5m, -d 1h
     #[clap(long, short = 'd')]
     pub duration: Option<humantime::Duration>,
 
