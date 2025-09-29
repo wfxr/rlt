@@ -144,8 +144,8 @@ pub struct BenchCli {
     /// Number of warm-up iterations to run before the main benchmark
     ///
     /// Warm-up iterations are not included in the final benchmark results.
-    #[clap(long, short = 'w')]
-    pub warmup: Option<NonZeroU64>,
+    #[clap(long, short = 'w', default_value_t = 0)]
+    pub warmup: u64,
 
     #[cfg(feature = "rate_limit")]
     /// Rate limit for benchmarking, in iterations per second (ips)
@@ -186,7 +186,7 @@ impl BenchCli {
             concurrency: self.concurrency.get(),
             iterations: self.iterations.map(|n| n.get()),
             duration: self.duration.map(|d| d.into()),
-            warmup_iterations: self.warmup.map(|n| n.get()),
+            warmups: self.warmup,
             #[cfg(feature = "rate_limit")]
             rate: self.rate,
         }
