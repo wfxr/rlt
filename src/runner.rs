@@ -44,6 +44,12 @@ pub struct BenchOpts {
     /// Duration to run the benchmark.
     pub duration: Option<Duration>,
 
+    /// Number of warm-up iterations to run before the main benchmark.
+    pub warmup_iterations: Option<u64>,
+
+    /// Duration to run warm-up iterations before the main benchmark.
+    pub warmup_duration: Option<Duration>,
+
     #[cfg(feature = "rate_limit")]
     /// Rate limit for benchmarking, in iterations per second (ips).
     pub rate: Option<NonZeroU32>,
@@ -159,10 +165,23 @@ where
         let _ = self.res_tx.send(res);
     }
 
+    async fn warmup_iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) {
+        self.wait_if_paused().await;
+        let res = self.suite.bench(state, info).await;
+
+        #[cfg(feature = "tracing")]
+        if let Err(e) = &res {
+            log::warn!("Error in warm-up iteration({info:?}): {:?}", e);
+        }
+        // Intentionally ignore warm-up results - they are not sent to the result channel
+    }
+
     /// Run the benchmark.
     pub async fn run(self) -> Result<()> {
         let concurrency = self.opts.concurrency;
         let iterations = self.opts.iterations;
+        let warmup_iterations = self.opts.warmup_iterations;
+        let warmup_duration = self.opts.warmup_duration;
 
         #[cfg(feature = "rate_limit")]
         let buckets = self.opts.rate.map(|r| {
@@ -170,6 +189,67 @@ where
             let clock = &self.opts.clock;
             Arc::new(RateLimiter::direct_with_clock(quota, clock))
         });
+
+        // Run warm-up phase if specified
+        if warmup_iterations.is_some() || warmup_duration.is_some() {
+            let warmup_seq = Arc::new(AtomicU64::new(0));
+            let warmup_cancel = CancellationToken::new();
+            
+            let mut warmup_set: JoinSet<Result<()>> = JoinSet::new();
+            
+            for worker in 0..concurrency {
+                #[cfg(feature = "rate_limit")]
+                let buckets = buckets.clone();
+                let mut b = self.clone();
+                let warmup_seq = warmup_seq.clone();
+                let cancel = warmup_cancel.clone();
+                
+                warmup_set.spawn(async move {
+                    let mut state = b.suite.state(worker).await?;
+                    let mut info = IterInfo::new(worker);
+
+                    b.suite.setup(&mut state, worker).await?;
+                    loop {
+                        info.runner_seq = warmup_seq.fetch_add(1, Ordering::Relaxed);
+                        if let Some(iterations) = warmup_iterations {
+                            if info.runner_seq >= iterations {
+                                break;
+                            }
+                        }
+
+                        #[cfg(feature = "rate_limit")]
+                        if let Some(buckets) = &buckets {
+                            select! {
+                                biased;
+                                _ = cancel.cancelled() => break,
+                                _ = buckets.until_ready() => (),
+                            }
+                        }
+
+                        select! {
+                            biased;
+                            _ = cancel.cancelled() => break,
+                            _ = b.warmup_iteration(&mut state, &info) => (),
+                        }
+                        info.worker_seq += 1;
+                    }
+                    b.suite.teardown(state, info).await?;
+
+                    Ok(())
+                });
+            }
+
+            if let Some(t) = warmup_duration {
+                select! {
+                    biased;
+                    _ = warmup_cancel.cancelled() => (),
+                    _ = self.opts.clock.sleep(t) => warmup_cancel.cancel(),
+                    _ = join_all(&mut warmup_set) => (),
+                }
+            };
+
+            join_all(&mut warmup_set).await?;
+        }
 
         let mut set: JoinSet<Result<()>> = JoinSet::new();
         for worker in 0..concurrency {
