@@ -47,9 +47,6 @@ pub struct BenchOpts {
     /// Number of warm-up iterations to run before the main benchmark.
     pub warmup_iterations: Option<u64>,
 
-    /// Duration to run warm-up iterations before the main benchmark.
-    pub warmup_duration: Option<Duration>,
-
     #[cfg(feature = "rate_limit")]
     /// Rate limit for benchmarking, in iterations per second (ips).
     pub rate: Option<NonZeroU32>,
@@ -181,7 +178,6 @@ where
         let concurrency = self.opts.concurrency;
         let iterations = self.opts.iterations;
         let warmup_iterations = self.opts.warmup_iterations;
-        let warmup_duration = self.opts.warmup_duration;
 
         #[cfg(feature = "rate_limit")]
         let buckets = self.opts.rate.map(|r| {
@@ -191,7 +187,7 @@ where
         });
 
         // Run warm-up phase if specified
-        if warmup_iterations.is_some() || warmup_duration.is_some() {
+        if warmup_iterations.is_some() {
             let warmup_seq = Arc::new(AtomicU64::new(0));
             let warmup_cancel = CancellationToken::new();
             
@@ -238,15 +234,6 @@ where
                     Ok(())
                 });
             }
-
-            if let Some(t) = warmup_duration {
-                select! {
-                    biased;
-                    _ = warmup_cancel.cancelled() => (),
-                    _ = self.opts.clock.sleep(t) => warmup_cancel.cancel(),
-                    _ = join_all(&mut warmup_set) => (),
-                }
-            };
 
             join_all(&mut warmup_set).await?;
         }

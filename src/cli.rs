@@ -48,17 +48,10 @@
 //!
 //!           Examples: -d 10s, -d 5m, -d 1h
 //!
-//!       --warmup-iterations <WARMUP_ITERATIONS>
+//!   -w, --warmup <WARMUP>
 //!           Number of warm-up iterations to run before the main benchmark
 //!
 //!           Warm-up iterations are not included in the final benchmark results.
-//!
-//!       --warmup-duration <WARMUP_DURATION>
-//!           Duration to run warm-up iterations before the main benchmark
-//!
-//!           Warm-up iterations are not included in the final benchmark results.
-//!
-//!           Examples: --warmup-duration 10s, --warmup-duration 1m
 //!
 //!   -r, --rate <RATE>
 //!           Rate limit for benchmarking, in iterations per second (ips)
@@ -151,16 +144,8 @@ pub struct BenchCli {
     /// Number of warm-up iterations to run before the main benchmark
     ///
     /// Warm-up iterations are not included in the final benchmark results.
-    #[clap(long)]
-    pub warmup_iterations: Option<NonZeroU64>,
-
-    /// Duration to run warm-up iterations before the main benchmark
-    ///
-    /// Warm-up iterations are not included in the final benchmark results.
-    ///
-    /// Examples: --warmup-duration 10s, --warmup-duration 1m
-    #[clap(long)]
-    pub warmup_duration: Option<humantime::Duration>,
+    #[clap(long, short = 'w')]
+    pub warmup: Option<NonZeroU64>,
 
     #[cfg(feature = "rate_limit")]
     /// Rate limit for benchmarking, in iterations per second (ips)
@@ -201,8 +186,7 @@ impl BenchCli {
             concurrency: self.concurrency.get(),
             iterations: self.iterations.map(|n| n.get()),
             duration: self.duration.map(|d| d.into()),
-            warmup_iterations: self.warmup_iterations.map(|n| n.get()),
-            warmup_duration: self.warmup_duration.map(|d| d.into()),
+            warmup_iterations: self.warmup.map(|n| n.get()),
             #[cfg(feature = "rate_limit")]
             rate: self.rate,
         }
