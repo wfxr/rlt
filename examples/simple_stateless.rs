@@ -27,7 +27,7 @@ impl StatelessBenchSuite for SimpleBench {
         };
 
         // simulate items processed in current iteration
-        let items = info.worker_seq % 100;
+        let items = info.worker_seq % 100 + 25;
 
         Ok(IterReport { duration, status, bytes: items * 1024, items })
     }
