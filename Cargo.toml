@@ -40,7 +40,7 @@ ratatui = { version = "0.27", features = [
 async-trait = "0.1"
 hdrhistogram = "7.5"
 itertools = "0.13"
-tabled = "0.15"
+tabled = "0.20"
 cfg-if = "1"
 parking_lot = "0.12"
 nonzero_ext = "0.3"
