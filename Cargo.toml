@@ -46,7 +46,7 @@ parking_lot = "0.12"
 nonzero_ext = "0.3"
 
 http = { version = "1.1", optional = true }
-governor = { version = "0.6", optional = true }
+governor = { version = "0.8", optional = true }
 log = { version = "0.4", optional = true }
 tracing = { version = "0.1", optional = true }
 tui-logger = { version = "0.11", optional = true, features = [
