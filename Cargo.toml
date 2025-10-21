@@ -39,7 +39,7 @@ ratatui = { version = "0.27", features = [
 ], default-features = false }
 async-trait = "0.1"
 hdrhistogram = "7.5"
-itertools = "0.13"
+itertools = "0.14"
 tabled = "0.15"
 cfg-if = "1"
 parking_lot = "0.12"
