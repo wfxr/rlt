@@ -229,8 +229,7 @@ where
 
                 // Wait for all workers to complete setup and warmup before starting main benchmark
                 // The leader (last worker to arrive) will start the clock
-                let wait_result = barrier.wait().await;
-                if wait_result.is_leader() {
+                if barrier.wait().await.is_leader() {
                     b.opts.clock.resume();
                 }
 
