@@ -137,7 +137,7 @@ impl TuiCollector {
         status_dist: &mut HashMap<Status, u64>,
         error_dist: &mut HashMap<String, u64>,
     ) -> Result<()> {
-        let mut clock = self.bench_opts.clock.clone();
+        let clock = self.bench_opts.clock.clone();
         let mut terminal = Terminal::new()?;
 
         let mut latest_iters = RotateWindowGroup::new(nonzero!(60usize));

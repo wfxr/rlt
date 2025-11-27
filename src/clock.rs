@@ -25,26 +25,37 @@ pub(crate) enum Status {
 }
 
 impl Clock {
-    pub fn start_at(start: Instant) -> Self {
-        let inner = InnerClock { status: Status::Running(start), elapsed: Duration::default() };
+    fn new(status: Status) -> Self {
+        let inner = InnerClock { status, elapsed: Duration::default() };
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "rate_limit")] {
-                Self { start, inner: Arc::new(Mutex::new(inner)) }
+                Self { start: Instant::now(), inner: Arc::new(Mutex::new(inner)) }
             } else {
                 Self { inner: Arc::new(Mutex::new(inner)) }
             }
         }
     }
 
-    pub fn resume(&mut self) {
+    /// Create a new clock that starts running immediately.
+    pub fn start_at(start: Instant) -> Self {
+        Self::new(Status::Running(start))
+    }
+
+    /// Create a new clock in paused state.
+    /// Call `resume()` to start the clock.
+    pub fn new_paused() -> Self {
+        Self::new(Status::Paused)
+    }
+
+    pub fn resume(&self) {
         let mut inner = self.inner.lock();
         if let Status::Paused = inner.status {
             inner.status = Status::Running(Instant::now());
         }
     }
 
-    pub fn pause(&mut self) {
+    pub fn pause(&self) {
         let mut inner = self.inner.lock();
         if let Status::Running(checkpoint) = inner.status {
             inner.elapsed += checkpoint.elapsed();

@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::{
     select,
-    sync::{mpsc, watch},
+    sync::{mpsc, watch, Barrier},
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
@@ -179,12 +179,17 @@ where
         // Global sequence counter for warmup phase
         let warmup_seq = Arc::new(AtomicU64::new(0));
 
+        // Barrier to synchronize all workers after setup and warmup
+        // All workers wait at the barrier, and the clock is started when all are ready
+        let barrier = Arc::new(Barrier::new(workers as usize));
+
         let mut set: JoinSet<Result<()>> = JoinSet::new();
         for worker in 0..workers {
             #[cfg(feature = "rate_limit")]
             let buckets = buckets.clone();
             let mut b = self.clone();
             let warmup_seq = warmup_seq.clone();
+            let barrier = barrier.clone();
 
             set.spawn(async move {
                 let mut state = b.suite.state(worker).await?;
@@ -221,6 +226,12 @@ where
 
                 // Reset worker sequence for main benchmark
                 info.worker_seq = 0;
+
+                // Wait for all workers to complete setup and warmup before starting main benchmark
+                // The leader (last worker to arrive) will start the clock
+                if barrier.wait().await.is_leader() {
+                    b.opts.clock.resume();
+                }
 
                 // Run main benchmark iterations
                 loop {
