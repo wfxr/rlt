@@ -52,14 +52,14 @@ impl Clock {
         }
     }
 
-    pub fn resume(&mut self) {
+    pub fn resume(&self) {
         let mut inner = self.inner.lock();
         if let Status::Paused = inner.status {
             inner.status = Status::Running(Instant::now());
         }
     }
 
-    pub fn pause(&mut self) {
+    pub fn pause(&self) {
         let mut inner = self.inner.lock();
         if let Status::Running(checkpoint) = inner.status {
             inner.elapsed += checkpoint.elapsed();
