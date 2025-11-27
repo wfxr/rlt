@@ -209,7 +209,7 @@ impl TuiCollector {
                         Constraint::Length(progress_height),
                         Constraint::Length(tips_height),
                     ])
-                    .split(f.size());
+                    .split(f.area());
 
                 let mid = Layout::default()
                     .direction(Direction::Horizontal)
@@ -279,7 +279,7 @@ impl TuiCollector {
                     #[cfg(feature = "tracing")]
                     (code, _) if self.state.log.display => {
                         use tui_logger::TuiWidgetEvent::*;
-                        let mut txn = |e| self.state.log.inner.transition(e);
+                        let txn = |e| self.state.log.inner.transition(e);
                         match code {
                             Char(' ') => txn(HideKey),
                             PageDown | Char('f') => txn(NextPageKey),
@@ -689,7 +689,7 @@ mod tui_log {
             .title_target("Selector")
             .state(&state.inner);
 
-        let area = centered_rect(80, 80, frame.size());
+        let area = centered_rect(80, 80, frame.area());
         let rows = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(100), Constraint::Min(1)])

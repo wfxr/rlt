@@ -85,6 +85,7 @@ impl Clock {
     }
 }
 
+// the trait `governor::clock::Clock` is not implemented for `&clock::Clock`
 #[cfg(feature = "rate_limit")]
 impl governor::clock::Clock for Clock {
     type Instant = std::time::Instant;
