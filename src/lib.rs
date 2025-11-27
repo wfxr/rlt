@@ -74,4 +74,4 @@ pub use crate::{
 };
 
 #[cfg(feature = "tracing")]
-pub use tui_logger::tracing_subscriber_layer as tui_tracing_subscriber_layer;
+pub use tui_logger::TuiTracingSubscriberLayer;

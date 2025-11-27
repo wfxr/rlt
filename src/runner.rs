@@ -168,10 +168,11 @@ where
         let iters = self.opts.iterations;
         let warmup_iters = self.opts.warmups;
 
+        // the trait `governor::clock::Clock` is not implemented for `&clock::Clock`
         #[cfg(feature = "rate_limit")]
         let buckets = self.opts.rate.map(|r| {
             let quota = Quota::per_second(r).allow_burst(nonzero!(1u32));
-            let clock = &self.opts.clock;
+            let clock = self.opts.clock.clone();
             Arc::new(RateLimiter::direct_with_clock(quota, clock))
         });
 

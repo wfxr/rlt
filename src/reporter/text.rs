@@ -3,6 +3,7 @@ use itertools::Itertools;
 use std::{cmp::Reverse, collections::HashMap, io::Write};
 use tabled::settings::object::{Cell, Columns, FirstColumn, FirstRow, LastColumn, Object, Rows};
 use tabled::settings::Padding;
+use tabled::settings::PaddingColor;
 use tabled::{
     builder::Builder,
     settings::{themes::Colorization, Alignment, Color, Margin, Style},
@@ -80,15 +81,9 @@ fn print_latency_histogram(
         .with(Colorization::exact([Color::FG_GREEN], LastColumn))
         .modify(Columns::new(2..=2), Padding::new(0, 0, 0, 0))
         .modify(LastColumn, Alignment::left())
-        .modify(
-            FirstColumn,
-            Padding::new(1, 1, 0, 0).fill('[', ']', ' ', ' ').colorize(
-                Color::default(),
-                Color::default(),
-                Color::default(),
-                Color::default(),
-            ),
-        )
+        .modify(FirstColumn, Padding::new(1, 1, 0, 0).fill('[', ']', ' ', ' '))
+        // can be removed?
+        .modify(FirstColumn, PaddingColor::filled(Color::default()))
         .modify(Columns::new(1..=1), Padding::new(1, 1, 0, 0));
     writeln!(w, "{}", quantiles)?;
 
