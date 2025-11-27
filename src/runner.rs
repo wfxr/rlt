@@ -44,6 +44,9 @@ pub struct BenchOpts {
     /// Duration to run the benchmark.
     pub duration: Option<Duration>,
 
+    /// Number of warm-up iterations to run before the main benchmark.
+    pub warmups: u64,
+
     #[cfg(feature = "rate_limit")]
     /// Rate limit for benchmarking, in iterations per second (ips).
     pub rate: Option<NonZeroU32>,
@@ -147,7 +150,7 @@ where
         Self { suite, opts, res_tx, pause, cancel, seq: Arc::default() }
     }
 
-    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) {
+    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) -> Result<IterReport> {
         self.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
 
@@ -155,14 +158,15 @@ where
         if let Err(e) = &res {
             log::error!("Error in iteration({info:?}): {:?}", e);
         }
-        // safe to ignore the error which means the receiver is dropped
-        let _ = self.res_tx.send(res);
+
+        res
     }
 
     /// Run the benchmark.
     pub async fn run(self) -> Result<()> {
-        let concurrency = self.opts.concurrency;
-        let iterations = self.opts.iterations;
+        let workers = self.opts.concurrency;
+        let iters = self.opts.iterations;
+        let warmup_iters = self.opts.warmups;
 
         #[cfg(feature = "rate_limit")]
         let buckets = self.opts.rate.map(|r| {
@@ -171,20 +175,56 @@ where
             Arc::new(RateLimiter::direct_with_clock(quota, clock))
         });
 
+        // Global sequence counter for warmup phase
+        let warmup_seq = Arc::new(AtomicU64::new(0));
+
         let mut set: JoinSet<Result<()>> = JoinSet::new();
-        for worker in 0..concurrency {
+        for worker in 0..workers {
             #[cfg(feature = "rate_limit")]
             let buckets = buckets.clone();
             let mut b = self.clone();
+            let warmup_seq = warmup_seq.clone();
+
             set.spawn(async move {
                 let mut state = b.suite.state(worker).await?;
                 let mut info = IterInfo::new(worker);
                 let cancel = b.cancel.clone();
 
+                // Setup is called once per worker
                 b.suite.setup(&mut state, worker).await?;
+
+                // Run warm-up iterations first
+                loop {
+                    info.runner_seq = warmup_seq.fetch_add(1, Ordering::Relaxed);
+                    if info.runner_seq >= warmup_iters {
+                        break;
+                    }
+
+                    #[cfg(feature = "rate_limit")]
+                    if let Some(buckets) = &buckets {
+                        select! {
+                            biased;
+                            _ = cancel.cancelled() => break,
+                            _ = buckets.until_ready() => (),
+                        }
+                    }
+
+                    select! {
+                        biased;
+                        _ = cancel.cancelled() => break,
+                        // Intentionally ignore warm-up results - they are not sent to the result channel
+                        _ = b.iteration(&mut state, &info) => (),
+                    }
+                    info.worker_seq += 1;
+                }
+
+                // Reset worker sequence for main benchmark
+                info.worker_seq = 0;
+
+                // Run main benchmark iterations
                 loop {
                     info.runner_seq = b.seq.fetch_add(1, Ordering::Relaxed);
-                    if let Some(iterations) = iterations {
+                    if let Some(iterations) = iters {
                         if info.runner_seq >= iterations {
                             break;
                         }
@@ -202,10 +242,15 @@ where
                     select! {
                         biased;
                         _ = cancel.cancelled() => break,
-                        _ = b.iteration(&mut state, &info) => (),
+                        res = b.iteration(&mut state, &info) => {
+                            // safe to ignore the error which means the receiver is dropped
+                            let _ = b.res_tx.send(res);
+                        },
                     }
                     info.worker_seq += 1;
                 }
+
+                // Teardown is called once per worker
                 b.suite.teardown(state, info).await?;
 
                 Ok(())

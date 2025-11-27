@@ -96,7 +96,7 @@ impl Terminal {
         })
     }
 
-    fn draw<F>(&mut self, f: F) -> io::Result<CompletedFrame>
+    fn draw<F>(&mut self, f: F) -> io::Result<CompletedFrame<'_>>
     where
         F: FnOnce(&mut Frame),
     {
