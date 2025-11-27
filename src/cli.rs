@@ -99,10 +99,7 @@ use clap::{
     Parser, ValueEnum,
 };
 use crossterm::tty::IsTty;
-use tokio::{
-    sync::{mpsc, watch},
-    time::Instant,
-};
+use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -232,7 +229,9 @@ where
     let (pause_tx, pause_rx) = watch::channel(false);
     let cancel = CancellationToken::new();
 
-    let opts = cli.bench_opts(Clock::start_at(Instant::now()));
+    // Create the clock in paused state - it will be resumed after all workers
+    // complete setup and warmup, ensuring accurate timing for the main benchmark.
+    let opts = cli.bench_opts(Clock::new_paused());
     let runner = Runner::new(bench_suite, opts.clone(), res_tx, pause_rx, cancel.clone());
 
     let mut collector: Box<dyn ReportCollector> = match cli.collector() {
