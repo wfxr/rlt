@@ -25,23 +25,8 @@ pub(crate) enum Status {
 }
 
 impl Clock {
-    /// Create a new clock that starts running immediately.
-    pub fn start_at(start: Instant) -> Self {
-        let inner = InnerClock { status: Status::Running(start), elapsed: Duration::default() };
-
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "rate_limit")] {
-                Self { start, inner: Arc::new(Mutex::new(inner)) }
-            } else {
-                Self { inner: Arc::new(Mutex::new(inner)) }
-            }
-        }
-    }
-
-    /// Create a new clock in paused state.
-    /// Call `resume()` to start the clock.
-    pub fn new_paused() -> Self {
-        let inner = InnerClock { status: Status::Paused, elapsed: Duration::default() };
+    fn new(status: Status) -> Self {
+        let inner = InnerClock { status, elapsed: Duration::default() };
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "rate_limit")] {
@@ -50,6 +35,17 @@ impl Clock {
                 Self { inner: Arc::new(Mutex::new(inner)) }
             }
         }
+    }
+
+    /// Create a new clock that starts running immediately.
+    pub fn start_at(start: Instant) -> Self {
+        Self::new(Status::Running(start))
+    }
+
+    /// Create a new clock in paused state.
+    /// Call `resume()` to start the clock.
+    pub fn new_paused() -> Self {
+        Self::new(Status::Paused)
     }
 
     pub fn resume(&self) {
