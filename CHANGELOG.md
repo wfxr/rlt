@@ -1,5 +1,25 @@
 
-## [0.2.1](https://github.com/wfxr/rlt/compare/v0.2.0..0.2.1) (2024-12-28)
+## [0.3.0](https://github.com/wfxr/rlt/compare/v0.2.1..0.3.0) (2025-11-28)
+
+### 🚀 Features
+
+- Add warm-up option to the load testing framework ([#23](https://github.com/wfxr/rlt/issues/23)) - ([0b1869d](https://github.com/wfxr/rlt/commit/0b1869dc0eb2e6f6f014cf43ac08a158b82b4d3a))
+
+### 🐛 Bug Fixes
+
+- Start timing after setup and warmup complete ([#33](https://github.com/wfxr/rlt/issues/33)) - ([acbff7c](https://github.com/wfxr/rlt/commit/acbff7cc4fcf34b4baf3f8915181f022a2ecdadb))
+- Fix example for duration in help text ([#19](https://github.com/wfxr/rlt/issues/19)) - ([f00f83f](https://github.com/wfxr/rlt/commit/f00f83f35c0d2677936fdad9e7588206c96a8baf))
+
+### 🚜 Refactor
+
+- Fix clippy - ([e92062d](https://github.com/wfxr/rlt/commit/e92062d992080355d5d1eb3019c54ff32ca7e9e8))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump up dependencies ([#32](https://github.com/wfxr/rlt/issues/32)) - ([11af2fd](https://github.com/wfxr/rlt/commit/11af2fdc0a80fc2d257c08491c51e4ddd674d8fb))
+- Set up Copilot instructions for repository ([#25](https://github.com/wfxr/rlt/issues/25)) - ([133a80f](https://github.com/wfxr/rlt/commit/133a80f1734a6a1d713f86841135fb1886746ce9))
+
+## [0.2.1](https://github.com/wfxr/rlt/compare/v0.2.0..v0.2.1) (2024-12-28)
 
 ### 🚀 Features
 
