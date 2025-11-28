@@ -19,8 +19,8 @@ body = """
 {% macro print_commit(commit) -%}
     - {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
         {% if commit.breaking %}[**breaking**] {% endif %}\
-        {{ commit.message | upper_first }} - \
-        ([{{ commit.id | truncate(length=7, end="") }}]({{ self::remote_url() }}/commit/{{ commit.id }}))\
+        {{ commit.message | upper_first }}\
+        {% if commit.remote.username %} ( @{{ commit.remote.username }}){%- endif %}\
 {% endmacro -%}
 
 {% if version %}\
@@ -69,8 +69,7 @@ filter_unconventional = true
 split_commits = false
 # regex for preprocessing the commit messages
 commit_preprocessors = [
-    { pattern = ' (#[0-9]+)', replace = '(${1})' },
-    { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](<REPO>/issues/${2}))" },
+    { pattern = '\(#(\d+)\)', replace = "[#${1}](<REPO>/issues/${1})" },
 ]
 # regex for parsing and grouping commits
 commit_parsers = [
@@ -100,7 +99,7 @@ tag_pattern = "v[0-9].*"
 # regex for skipping tags
 skip_tags = "beta|alpha"
 # regex for ignoring tags
-ignore_tags = "rc|v2.1.0|v2.1.1"
+ignore_tags = "rc"
 # sort the tags topologically
 topo_order = false
 # sort the commits inside sections by oldest/newest order

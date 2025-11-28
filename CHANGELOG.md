@@ -1,78 +1,84 @@
 
-## [0.3.0](https://github.com/wfxr/rlt/compare/v0.2.1..0.3.0) (2025-11-28)
+## [unreleased]
+
+### 📚 Documentation
+
+- Update cliff config and changelog format
+
+## [0.3.0](https://github.com/wfxr/rlt/compare/v0.2.1..v0.3.0) (2025-11-28)
 
 ### 🚀 Features
 
-- Add warm-up option to the load testing framework ([#23](https://github.com/wfxr/rlt/issues/23)) - ([0b1869d](https://github.com/wfxr/rlt/commit/0b1869dc0eb2e6f6f014cf43ac08a158b82b4d3a))
+- Add warm-up option to the load testing framework [#23](https://github.com/wfxr/rlt/issues/23) ( @Copilot)
 
 ### 🐛 Bug Fixes
 
-- Start timing after setup and warmup complete ([#33](https://github.com/wfxr/rlt/issues/33)) - ([acbff7c](https://github.com/wfxr/rlt/commit/acbff7cc4fcf34b4baf3f8915181f022a2ecdadb))
-- Fix example for duration in help text ([#19](https://github.com/wfxr/rlt/issues/19)) - ([f00f83f](https://github.com/wfxr/rlt/commit/f00f83f35c0d2677936fdad9e7588206c96a8baf))
+- Start timing after setup and warmup complete [#33](https://github.com/wfxr/rlt/issues/33) ( @Copilot)
+- Fix example for duration in help text [#19](https://github.com/wfxr/rlt/issues/19) ( @BendingBender)
 
 ### 🚜 Refactor
 
-- Fix clippy - ([e92062d](https://github.com/wfxr/rlt/commit/e92062d992080355d5d1eb3019c54ff32ca7e9e8))
+- Fix clippy ( @wfxr)
 
 ### ⚙️ Miscellaneous Tasks
 
-- Bump up dependencies ([#32](https://github.com/wfxr/rlt/issues/32)) - ([11af2fd](https://github.com/wfxr/rlt/commit/11af2fdc0a80fc2d257c08491c51e4ddd674d8fb))
-- Set up Copilot instructions for repository ([#25](https://github.com/wfxr/rlt/issues/25)) - ([133a80f](https://github.com/wfxr/rlt/commit/133a80f1734a6a1d713f86841135fb1886746ce9))
+- Bump up dependencies [#32](https://github.com/wfxr/rlt/issues/32) ( @wfxr)
+- Set up Copilot instructions for repository [#25](https://github.com/wfxr/rlt/issues/25) ( @Copilot)
 
 ## [0.2.1](https://github.com/wfxr/rlt/compare/v0.2.0..v0.2.1) (2024-12-28)
 
 ### 🚀 Features
 
-- Add colored styles by default - ([1e068b5](https://github.com/wfxr/rlt/commit/1e068b569288f700bffd475f9d701fa837329e17))
+- Add colored styles by default ( @wfxr)
 
 ### ⚙️ Miscellaneous Tasks
 
-- Bump up dependencies - ([db56dbf](https://github.com/wfxr/rlt/commit/db56dbf10aac640d9e700a2798d5715fcf8a5d08))
-- Bump up dependencies - ([0a067be](https://github.com/wfxr/rlt/commit/0a067be18a08de276f7cc4bc85cc0e73b81417da))
+- Bump up dependencies ( @wfxr)
+- Bump up dependencies ( @wfxr)
 
 ## [0.2.0](https://github.com/wfxr/rlt/compare/v0.1.1..v0.2.0) (2024-08-12)
 
 ### 🚀 Features
 
-- Add tracing support - ([7c78f9d](https://github.com/wfxr/rlt/commit/7c78f9db384d421b022fc04beeed18d6015819be))
-- Allow quitting the tui collector manually ([#12](https://github.com/wfxr/rlt/issues/12)) - ([a1ea71b](https://github.com/wfxr/rlt/commit/a1ea71b6df9b37625a8838ecee7d2e40c3f27edf))
-- Add rate limiter feature - ([3ca6a6e](https://github.com/wfxr/rlt/commit/3ca6a6ed4535ecf7d95e5bc4b0e60c8535b38856))
+- Add tracing support ( @wfxr)
+- Allow quitting the tui collector manually [#12](https://github.com/wfxr/rlt/issues/12) ( @wfxr)
+- Add rate limiter feature ( @wfxr)
 
 ### 🚜 Refactor
 
-- Rename log feature to tracing - ([9f40255](https://github.com/wfxr/rlt/commit/9f4025577217f0945c397d8550af86d014adcdf6))
-- Remove unused flume dependency - ([aa5c0e8](https://github.com/wfxr/rlt/commit/aa5c0e82dd10f5df3a6f8c0aa4840d62e8adb03c))
-- Extract `handle_event` method misc - ([ea5ccb2](https://github.com/wfxr/rlt/commit/ea5ccb2dff7272b384ad555ef16b6c400e24aaef))
-- Use NonZero types - ([1b9a62c](https://github.com/wfxr/rlt/commit/1b9a62cb068513e2ec227b38ce6443f090f8c638))
-- Use governor for rate limiting - ([8b23af0](https://github.com/wfxr/rlt/commit/8b23af0ed72c30154fc73add592c5b5bb71fe056))
+- Rename log feature to tracing ( @wfxr)
+- Remove unused flume dependency ( @wfxr)
+- Extract `handle_event` method misc ( @wfxr)
+- Use NonZero types ( @wfxr)
+- Use governor for rate limiting ( @wfxr)
 
 ### ⚙️ Miscellaneous Tasks
 
-- Bump up dependencies - ([5ee4e2f](https://github.com/wfxr/rlt/commit/5ee4e2ff2739d41f4ac37ad8e5ec3b5a6f7ec0b3))
-- Ignore release commit message for cliff - ([a2af64a](https://github.com/wfxr/rlt/commit/a2af64a3073f4cd21550fbf3e329e3a8021bf351))
-- Bump up ratatui & other dependencies - ([3cbc272](https://github.com/wfxr/rlt/commit/3cbc27215f7a94e42766764440d92b513a087c27))
-- Sync Cargo.lock - ([a69bdaa](https://github.com/wfxr/rlt/commit/a69bdaa1f15d6ddbe50364dddc2d696de18139a7))
-- Update release config - ([d068be1](https://github.com/wfxr/rlt/commit/d068be1c0034a66c1c9d8c936e595848093ec899))
-- Add FUNDING.yml - ([444fcff](https://github.com/wfxr/rlt/commit/444fcff334120752b9904297ce89d9c7c04f2b5a))
+- Bump up dependencies ( @wfxr)
+- Ignore release commit message for cliff ( @wfxr)
+- Bump up ratatui & other dependencies ( @wfxr)
+- Sync Cargo.lock ( @wfxr)
+- Update release config ( @wfxr)
+- Add FUNDING.yml ( @wfxr)
 
 ## [0.1.1] - 2024-04-14
 
 ### 🚀 Features
 
-- Implement logical clock ([#6](https://github.com/wfxr/rlt/issues/6)) - ([d90afd8](https://github.com/wfxr/rlt/commit/d90afd833490de50de9aae82b6cb01cf456a3290))
-- Add debug derive to BenchCli ([#7](https://github.com/wfxr/rlt/issues/7)) - ([26208b8](https://github.com/wfxr/rlt/commit/26208b8939907ebd079b1b6e267979c76e610146))
+- Implement logical clock [#6](https://github.com/wfxr/rlt/issues/6) ( @wfxr)
+- Add debug derive to BenchCli [#7](https://github.com/wfxr/rlt/issues/7) ( @mattremmel)
 
 ### 🐛 Bug Fixes
 
-- Fix panic when the receiver is dropped([#2](https://github.com/wfxr/rlt/issues/2)) - ([08f0bcd](https://github.com/wfxr/rlt/commit/08f0bcd94a19e819522a19ad69b50e04ba830ab7))
+- Fix panic when the receiver is dropped #2 ( @wfxr)
 
 ### ⚙️ Miscellaneous Tasks
 
-- Fix changelog workflow - ([d53bc17](https://github.com/wfxr/rlt/commit/d53bc17323cce1f55ec5db4c6748c8051c246945))
-- Fix release branch - ([be59e79](https://github.com/wfxr/rlt/commit/be59e79eceedc2a2ea808e12beeab184265f83c0))
-- Improve release process ([#10](https://github.com/wfxr/rlt/issues/10)) - ([967f711](https://github.com/wfxr/rlt/commit/967f711ce47567044f91035b6f74eb94500b3750))
-- Polish changelog ([#9](https://github.com/wfxr/rlt/issues/9)) - ([5c3b1a1](https://github.com/wfxr/rlt/commit/5c3b1a18bb4814ee843c1c6312aeb93b31eb4808))
-- Use git-cliff to generate changlog ([#8](https://github.com/wfxr/rlt/issues/8)) - ([13d806c](https://github.com/wfxr/rlt/commit/13d806cb4a3c63db09e93735d2fbcf785ed9d22e))
-- Remove spaces in tui title - ([722842e](https://github.com/wfxr/rlt/commit/722842ec9e25e11de45c6de24482ed5cf94ee4c0))
+- Fix changelog workflow ( @wfxr)
+- Fix release branch ( @wfxr)
+- Improve release process [#10](https://github.com/wfxr/rlt/issues/10) ( @wfxr)
+- Polish changelog [#9](https://github.com/wfxr/rlt/issues/9) ( @wfxr)
+- Use git-cliff to generate changlog [#8](https://github.com/wfxr/rlt/issues/8) ( @wfxr)
+- Remove spaces in tui title ( @wfxr)
 
 <!-- generated by git-cliff -->
