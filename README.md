@@ -72,7 +72,7 @@ Finally, create the main function to run the load test:
 #[tokio::main]
 async fn main() -> Result<()> {
     let bs = HttpBench::parse();
-    rlt::cli::run(bs.bench_opts, bs).await
+    rlt::cli::run(bs.bench_opts.clone(), bs).await
 }
 ```
 
