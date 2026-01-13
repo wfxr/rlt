@@ -28,7 +28,7 @@ Run `cargo add rlt` to add `rlt` as a dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rlt = "0.1.1"
+rlt = "0.3.0"
 ```
 
 Then create your bench suite by implementing the `BenchSuite` trait.
