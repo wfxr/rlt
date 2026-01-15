@@ -1,12 +1,11 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{cli::BenchCli, BenchSuite, IterInfo, IterReport, Status};
+use rlt::{bench_cli, bench_cli_run, BenchSuite, IterInfo, IterReport, Status};
 use tokio::time::Instant;
 use tokio_postgres::{Client, NoTls};
 
-#[derive(Parser, Clone)]
-pub struct DBBench {
+bench_cli!(DBBench, {
     /// Host of the PostgreSQL server.
     #[clap(long, default_value = "localhost")]
     pub host: String,
@@ -30,11 +29,7 @@ pub struct DBBench {
     /// Name of the table to insert into.
     #[clap(long, default_value = "t")]
     pub table: String,
-
-    /// Embed BenchCli into this Opts.
-    #[command(flatten)]
-    pub bench_opts: BenchCli,
-}
+});
 
 #[async_trait]
 impl BenchSuite for DBBench {
@@ -96,6 +91,5 @@ impl BenchSuite for DBBench {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let bs: DBBench = DBBench::parse();
-    rlt::cli::run(bs.bench_opts.clone(), bs).await
+    bench_cli_run!(DBBench).await
 }
