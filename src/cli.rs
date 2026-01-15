@@ -288,7 +288,7 @@ macro_rules! bench_cli {
         pub struct $name {
             $($field)*
 
-            /// Embed BenchCli into this Opts.
+            /// Embed standard BenchCli options into this CLI struct.
             #[command(flatten)]
             pub bench_opts: ::rlt::cli::BenchCli,
         }
