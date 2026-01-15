@@ -280,7 +280,7 @@ where
     Ok(())
 }
 
-/// A macro to define a CLI struct that embeds `BenchCli` and implements `CliBenchSuite`.
+/// A macro to define a CLI struct that embeds `BenchCli`.
 #[macro_export]
 macro_rules! bench_cli {
     ($name:ident, { $($field:tt)* }) => {
