@@ -32,18 +32,16 @@ rlt = "0.3.0"
 ```
 
 Then create your bench suite by implementing the `BenchSuite` trait.
-`flatten` attribute can be used to embed the predefined `BenchCli` into your own.
+
+The `bench_cli!` macro can be used to define your CLI options which
+automatically includes the predefined `BenchCli` options.
 
 ```rust
-#[derive(Parser, Clone)]
-pub struct HttpBench {
+bench_cli!(HttpBench, {
     /// Target URL.
+    #[clap(long)]
     pub url: Url,
-
-    /// Embed BenchCli into this Opts.
-    #[command(flatten)]
-    pub bench_opts: BenchCli,
-}
+});
 
 #[async_trait]
 impl BenchSuite for HttpBench {
@@ -66,13 +64,12 @@ impl BenchSuite for HttpBench {
 
 *You can also create a separate struct to hold the cli options for more flexibility. There is an example in [examples/http_hyper.rs](examples/http_hyper.rs).*
 
-Finally, create the main function to run the load test:
+Finally, create the main function to run the load test using the `bench_cli_run!` macro.
 
 ```rust
 #[tokio::main]
 async fn main() -> Result<()> {
-    let bs = HttpBench::parse();
-    rlt::cli::run(bs.bench_opts.clone(), bs).await
+    bench_cli_run!(HttpBench).await
 }
 ```
 

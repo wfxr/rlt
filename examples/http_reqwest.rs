@@ -2,21 +2,14 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
 use reqwest::{Client, Url};
-use rlt::{
-    cli::BenchCli,
-    IterReport, {BenchSuite, IterInfo},
-};
+use rlt::{bench_cli, bench_cli_run, BenchSuite, IterInfo, IterReport};
 use tokio::time::Instant;
 
-#[derive(Parser, Clone)]
-pub struct HttpBench {
+bench_cli!(HttpBench, {
     /// Target URL.
+    #[clap(long)]
     pub url: Url,
-
-    /// Embed BenchCli into this Opts.
-    #[command(flatten)]
-    pub bench_opts: BenchCli,
-}
+});
 
 #[async_trait]
 impl BenchSuite for HttpBench {
@@ -38,6 +31,5 @@ impl BenchSuite for HttpBench {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let bs = HttpBench::parse();
-    rlt::cli::run(bs.bench_opts.clone(), bs).await
+    bench_cli_run!(HttpBench).await
 }

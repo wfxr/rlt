@@ -9,21 +9,14 @@ use hyper_util::{
     client::legacy::{connect::HttpConnector, Client},
     rt::TokioExecutor,
 };
-use rlt::{
-    cli::BenchCli,
-    IterReport, {BenchSuite, IterInfo},
-};
+use rlt::{bench_cli, BenchSuite, IterInfo, IterReport};
 use tokio::time::Instant;
 
-#[derive(Parser, Clone)]
-pub struct Opts {
+bench_cli!(Opts, {
     /// Target URL.
+    #[clap(long)]
     pub url: Uri,
-
-    /// Embed BenchCli into this Opts.
-    #[command(flatten)]
-    pub bench_opts: BenchCli,
-}
+});
 
 #[derive(Clone)]
 struct HttpBench {

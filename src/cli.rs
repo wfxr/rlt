@@ -19,6 +19,14 @@
 //! }
 //! ```
 //!
+//! You can also use the provided macros `bench_cli!`:
+//! ```no_run
+//! rlt::bench_cli!(Opts, {
+//!    /// Target URL.
+//!     pub url: String,
+//! });
+//! ```
+//!
 //! The above example will generate a CLI struct with `url` and all the options
 //! from `BenchCli`:
 //!
@@ -270,4 +278,29 @@ where
     }
 
     Ok(())
+}
+
+/// A macro to define a CLI struct that embeds `BenchCli` and implements `CliBenchSuite`.
+#[macro_export]
+macro_rules! bench_cli {
+    ($name:ident, { $($field:tt)* }) => {
+        #[derive(::clap::Parser, Clone)]
+        pub struct $name {
+            $($field)*
+
+            /// Embed BenchCli into this Opts.
+            #[command(flatten)]
+            pub bench_opts: ::rlt::cli::BenchCli,
+        }
+    };
+}
+
+/// A macro to run the benchmark with the given benchmark suite defined by `bench_cli!`.
+/// Note: this requires the $bench_suite to implement `BenchSuite`.
+#[macro_export]
+macro_rules! bench_cli_run {
+    ($bench_suite:ty) => {{
+        let b = <$bench_suite>::parse();
+        ::rlt::cli::run(b.bench_opts.clone(), b)
+    }};
 }
