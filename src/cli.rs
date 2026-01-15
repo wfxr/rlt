@@ -87,8 +87,10 @@
 //!   -h, --help
 //!           Print help (see a summary with '-h')
 use std::{
+    fs::File,
     io::stdout,
     num::{NonZeroU32, NonZeroU64, NonZeroU8},
+    path::PathBuf,
 };
 
 use clap::{
@@ -109,7 +111,7 @@ use crate::{
     runner::{BenchOpts, BenchSuite, Runner},
 };
 
-#[derive(Parser, Clone, Copy, Debug)]
+#[derive(Parser, Clone, Debug)]
 #[clap(
     styles(Styles::styled()
         .header(AnsiColor::Yellow.on_default() | Effects::BOLD)
@@ -174,6 +176,12 @@ pub struct BenchCli {
     /// Output format for the report
     #[clap(short, long, value_enum, default_value_t = ReportFormat::Text, ignore_case = true)]
     pub output: ReportFormat,
+
+    /// Output file path for the report
+    ///
+    /// When set, the report will be written to the specified file instead of stdout.
+    #[clap(long, short = 'O')]
+    pub output_file: Option<PathBuf>,
 }
 
 impl BenchCli {
@@ -255,7 +263,11 @@ where
         ReportFormat::Json => &JsonReporter,
     };
 
-    reporter.print(&mut stdout(), &report.await??)?;
+    let report = report.await??;
+    match cli.output_file {
+        Some(path) => reporter.print(&mut File::create(path)?, &report)?,
+        None => reporter.print(&mut stdout(), &report)?,
+    }
 
     Ok(())
 }
