@@ -262,8 +262,14 @@ where
                     info.worker_seq += 1;
                 }
 
-                // Teardown is called once per worker
-                b.suite.teardown(state, info).await?;
+                // Teardown is called once per worker.
+                // Ignore teardown errors as the connection may be in an inconsistent state
+                // after cancellation (e.g., timeout). This is expected behavior and should
+                // not cause the benchmark to fail.
+                if let Err(_e) = b.suite.teardown(state, info).await {
+                    #[cfg(feature = "tracing")]
+                    log::warn!("Error during teardown for worker {}: {:?}", worker, _e);
+                }
 
                 Ok(())
             });
