@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{bench_cli, bench_cli_run, BenchSuite, IterInfo, IterReport, Status};
+use rlt::{BenchSuite, IterInfo, IterReport, Status, bench_cli, bench_cli_run};
 use tokio::time::Instant;
 use tokio_postgres::{Client, NoTls};
 

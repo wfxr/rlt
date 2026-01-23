@@ -2,8 +2,9 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
 use rlt::{
+    IterReport, Status,
     cli::BenchCli,
-    IterReport, Status, {IterInfo, StatelessBenchSuite},
+    {IterInfo, StatelessBenchSuite},
 };
 use tokio::time::{Duration, Instant};
 

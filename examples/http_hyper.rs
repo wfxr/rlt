@@ -6,10 +6,10 @@ use http_body_util::{BodyExt, Full};
 use hyper::Uri;
 use hyper_tls::HttpsConnector;
 use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
+    client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
-use rlt::{bench_cli, BenchSuite, IterInfo, IterReport};
+use rlt::{BenchSuite, IterInfo, IterReport, bench_cli};
 use tokio::time::Instant;
 
 bench_cli!(Opts, {

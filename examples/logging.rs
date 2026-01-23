@@ -1,10 +1,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{cli::BenchCli, IterInfo, IterReport, StatelessBenchSuite, Status, StatusKind};
+use rlt::{IterInfo, IterReport, StatelessBenchSuite, Status, StatusKind, cli::BenchCli};
 use tokio::time::{Duration, Instant};
 
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]
 struct SimpleBench;

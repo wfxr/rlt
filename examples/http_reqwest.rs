@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
 use reqwest::{Client, Url};
-use rlt::{bench_cli, bench_cli_run, BenchSuite, IterInfo, IterReport};
+use rlt::{BenchSuite, IterInfo, IterReport, bench_cli, bench_cli_run};
 use tokio::time::Instant;
 
 bench_cli!(HttpBench, {
