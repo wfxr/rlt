@@ -1,19 +1,19 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use crossterm::{
-    cursor,
+    ExecutableCommand, cursor,
     event::{Event, KeyCode, KeyEvent, KeyModifiers},
-    terminal, ExecutableCommand,
+    terminal,
 };
 use itertools::Itertools;
 use nonzero_ext::nonzero;
 use ratatui::{
+    CompletedFrame, Frame,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::Line,
-    widgets::{block::Title, BarChart, Block, Borders, Clear, Gauge, Padding, Paragraph},
-    CompletedFrame, Frame,
+    widgets::{BarChart, Block, Borders, Clear, Gauge, Padding, Paragraph, block::Title},
 };
 use std::{collections::HashMap, fmt, io, num::NonZeroU8, time::Duration};
 use tokio::{
@@ -431,7 +431,7 @@ fn render_process_gauge(
 fn render_status_dist(frame: &mut Frame, area: Rect, status_dist: &HashMap<Status, u64>) {
     let dist = status_dist
         .iter()
-        .sorted_by_key(|(_, &cnt)| std::cmp::Reverse(cnt))
+        .sorted_by_key(|&(_, cnt)| std::cmp::Reverse(cnt))
         .map(|(status, cnt)| {
             let s = format!("{} {} iters", status, cnt);
             let s = match status.kind() {
@@ -454,7 +454,7 @@ fn render_error_dist(frame: &mut Frame, area: Rect, error_dist: &HashMap<String,
 
     let dist = error_dist
         .iter()
-        .sorted_by_key(|(_, &cnt)| std::cmp::Reverse(cnt))
+        .sorted_by_key(|&(_, cnt)| std::cmp::Reverse(cnt))
         .map(|(err, cnt)| Line::from(format!("[{cnt}] {err}")))
         .collect_vec();
     let p = Paragraph::new(dist).block(Block::new().title("Error distribution").borders(Borders::ALL));

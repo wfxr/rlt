@@ -1,12 +1,12 @@
 use crossterm::style::{StyledContent, Stylize};
 use itertools::Itertools;
 use std::{cmp::Reverse, collections::HashMap, io::Write};
-use tabled::settings::object::{Cell, Columns, FirstColumn, FirstRow, LastColumn, Object, Rows};
 use tabled::settings::Padding;
 use tabled::settings::PaddingColor;
+use tabled::settings::object::{Cell, Columns, FirstColumn, FirstRow, LastColumn, Object, Rows};
 use tabled::{
     builder::Builder,
-    settings::{themes::Colorization, Alignment, Color, Margin, Style},
+    settings::{Alignment, Color, Margin, Style, themes::Colorization},
 };
 
 use crate::duration::TimeUnit;
@@ -219,7 +219,7 @@ fn print_latency_percentiles(w: &mut dyn Write, hist: &LatencyHistogram, u: Time
 fn print_status(w: &mut dyn Write, status: &HashMap<Status, u64>) -> anyhow::Result<()> {
     let status_v = status
         .iter()
-        .sorted_unstable_by_key(|(_, &cnt)| Reverse(cnt))
+        .sorted_unstable_by_key(|&(_, cnt)| Reverse(cnt))
         .collect_vec();
     writeln!(w, "{}", "Status distribution".h1())?;
     if !status_v.is_empty() {
@@ -244,7 +244,7 @@ fn print_error(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
     let error_v = report
         .error_dist
         .iter()
-        .sorted_unstable_by_key(|(_, &cnt)| Reverse(cnt))
+        .sorted_unstable_by_key(|&(_, cnt)| Reverse(cnt))
         .collect_vec();
     let max = error_v.iter().map(|(_, iters)| iters).max().unwrap();
     let iters_width = max.to_string().len();

@@ -3,14 +3,14 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::{
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 use tokio::{
     select,
-    sync::{mpsc, watch, Barrier},
+    sync::{Barrier, mpsc, watch},
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
@@ -236,10 +236,10 @@ where
                 // Run main benchmark iterations
                 loop {
                     info.runner_seq = b.seq.fetch_add(1, Ordering::Relaxed);
-                    if let Some(iterations) = iters {
-                        if info.runner_seq >= iterations {
-                            break;
-                        }
+                    if let Some(iterations) = iters
+                        && info.runner_seq >= iterations
+                    {
+                        break;
                     }
 
                     #[cfg(feature = "rate_limit")]

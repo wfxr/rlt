@@ -97,16 +97,16 @@
 use std::{
     fs::File,
     io::stdout,
-    num::{NonZeroU32, NonZeroU64, NonZeroU8},
+    num::{NonZeroU8, NonZeroU32, NonZeroU64},
     path::PathBuf,
 };
 
 use clap::{
-    builder::{
-        styling::{AnsiColor, Effects},
-        Styles,
-    },
     Parser, ValueEnum,
+    builder::{
+        Styles,
+        styling::{AnsiColor, Effects},
+    },
 };
 use crossterm::tty::IsTty;
 use tokio::sync::{mpsc, watch};
