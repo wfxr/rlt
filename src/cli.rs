@@ -113,11 +113,21 @@ use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    baseline::{self, BaselineName, RegressionMetric, Verdict},
     clock::Clock,
     collector::{ReportCollector, SilentCollector, TuiCollector},
-    reporter::{BenchReporter, JsonReporter, TextReporter},
+    reporter::{JsonReporter, TextReporter},
     runner::{BenchOpts, BenchSuite, Runner},
 };
+
+/// Default regression metrics for baseline comparison.
+const DEFAULT_REGRESSION_METRICS: &[RegressionMetric] = &[
+    RegressionMetric::ItersRate,
+    RegressionMetric::LatencyMean,
+    RegressionMetric::LatencyP90,
+    RegressionMetric::LatencyP99,
+    RegressionMetric::SuccessRatio,
+];
 
 #[derive(Parser, Clone, Debug)]
 #[clap(
@@ -190,6 +200,47 @@ pub struct BenchCli {
     /// When set, the report will be written to the specified file instead of stdout.
     #[clap(long, short = 'O')]
     pub output_file: Option<PathBuf>,
+
+    /// Save benchmark results as a named baseline
+    ///
+    /// Can be combined with --baseline to compare and then save.
+    /// Name must match pattern: [a-zA-Z0-9_.-]+ (no path separators or special chars)
+    #[clap(long)]
+    pub save_baseline: Option<BaselineName>,
+
+    /// Compare against a named baseline from baseline directory
+    ///
+    /// Can be combined with --save-baseline (compare first, then save)
+    #[clap(long, conflicts_with = "baseline_file")]
+    pub baseline: Option<BaselineName>,
+
+    /// Load baseline from a JSON file for comparison
+    ///
+    /// Supports both baseline format (with metadata) and plain JSON report format.
+    #[clap(long, conflicts_with = "baseline")]
+    pub baseline_file: Option<PathBuf>,
+
+    /// Directory for storing baselines
+    ///
+    /// Priority: CLI flag > RLT_BASELINE_DIR > ${CARGO_TARGET_DIR}/rlt/baselines > target/rlt/baselines
+    #[clap(long)]
+    pub baseline_dir: Option<PathBuf>,
+
+    /// Noise threshold for comparison (percentage, e.g., 1.0 means 1%)
+    ///
+    /// Changes within this threshold are considered noise and reported as "unchanged"
+    #[clap(long, default_value = "1.0")]
+    pub noise_threshold: f64,
+
+    /// Fail the benchmark if regression is detected (for CI/CD integration)
+    ///
+    /// Exit code 1 if verdict is 'regressed' or 'mixed'
+    #[clap(long)]
+    pub fail_on_regression: bool,
+
+    /// Metrics to consider for verdict calculation and regression detection
+    #[clap(long, value_delimiter = ',', default_values_t = DEFAULT_REGRESSION_METRICS)]
+    pub regression_metrics: Vec<RegressionMetric>,
 }
 
 impl BenchCli {
@@ -241,6 +292,18 @@ where
     BS: BenchSuite + Send + Sync + 'static,
     BS::WorkerState: Send + Sync + 'static,
 {
+    // Resolve baseline directory
+    let baseline_dir = baseline::resolve_baseline_dir(cli.baseline_dir.as_deref());
+
+    // Load and validate baseline BEFORE running the benchmark (fail fast)
+    let baseline = match (&cli.baseline, &cli.baseline_file) {
+        (Some(name), _) => Some(baseline::load(&baseline_dir, name)?),
+        (None, Some(path)) => Some(baseline::load_file(path)?),
+        (None, None) => None,
+    };
+    baseline.as_ref().map(|b| b.validate(&cli)).transpose()?;
+
+    // Now run the benchmark
     let (res_tx, res_rx) = mpsc::unbounded_channel();
     let (pause_tx, pause_rx) = watch::channel(false);
     let cancel = CancellationToken::new();
@@ -266,15 +329,38 @@ where
 
     runner.run().await?;
 
-    let reporter: &dyn BenchReporter = match cli.output {
-        ReportFormat::Text => &TextReporter,
-        ReportFormat::Json => &JsonReporter,
+    let report = report.await??;
+
+    // Compute comparison using pre-loaded baseline
+    let cmp = baseline.map(|b| baseline::compare(&report, &b, cli.noise_threshold, &cli.regression_metrics));
+
+    // Print report with comparison
+    let mut output: Box<dyn std::io::Write> = match cli.output_file {
+        Some(ref path) => Box::new(File::create(path)?),
+        None => Box::new(stdout()),
     };
 
-    let report = report.await??;
-    match cli.output_file {
-        Some(path) => reporter.print(&mut File::create(path)?, &report)?,
-        None => reporter.print(&mut stdout(), &report)?,
+    match cli.output {
+        ReportFormat::Text => TextReporter.print(&mut output, &report, cmp.as_ref())?,
+        ReportFormat::Json => JsonReporter.print(&mut output, &report, cmp.as_ref())?,
+    }
+
+    // Save baseline if requested (after comparison, so we can compare-then-save)
+    if let Some(ref name) = cli.save_baseline {
+        baseline::save(&baseline_dir, name, &report, &cli)?;
+        eprintln!(
+            "Baseline '{}' saved to {}",
+            name,
+            baseline_dir.join(format!("{}.json", name)).display()
+        );
+    }
+
+    // Handle regression exit code for CI
+    if cli.fail_on_regression
+        && let Some(ref cmp) = cmp
+        && matches!(cmp.verdict, Verdict::Regressed | Verdict::Mixed)
+    {
+        std::process::exit(1);
     }
 
     Ok(())

@@ -21,6 +21,7 @@ rlt for various services, such as Http, gRPC, Thrift, Database, or other customi
 - **Rich Statistics**: Collect and display rich statistics.
 - **High performance**: Optimized for performance and resource usage.
 - **Real-time TUI**: Monitor testing progress with a powerful real-time TUI.
+- **Baseline Comparison**: Save and compare results to track performance changes.
 
 ### Quick Start
 
@@ -74,6 +75,23 @@ async fn main() -> Result<()> {
 ```
 
 More examples can be found in the [examples](examples) directory.
+
+### Baseline Comparison
+
+rlt supports saving benchmark results as baselines and comparing future runs against them:
+
+```bash
+# Save current run as baseline
+mybench --url http://localhost:8080 -c 10 -d 30s --save-baseline v1.0
+
+# Compare against baseline
+mybench --url http://localhost:8080 -c 10 -d 30s --baseline v1.0
+
+# CI mode: fail on regression
+mybench --url http://localhost:8080 --baseline main --fail-on-regression
+```
+
+The comparison displays performance deltas with color-coded indicators, making it easy to track performance changes across code revisions.
 
 ### Credits
 

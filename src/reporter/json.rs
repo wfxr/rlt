@@ -1,4 +1,4 @@
-use crate::{histogram::PERCENTAGES, report::BenchReport};
+use crate::{baseline::Comparison, histogram::PERCENTAGES, report::BenchReport};
 
 use super::BenchReporter;
 
@@ -10,6 +10,18 @@ pub struct JsonReporter;
 
 impl BenchReporter for JsonReporter {
     fn print(&self, w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
+        self.print(w, report, None)
+    }
+}
+
+impl JsonReporter {
+    /// Print report with optional baseline comparison.
+    pub fn print(
+        &self,
+        w: &mut dyn Write,
+        report: &BenchReport,
+        comparison: Option<&Comparison>,
+    ) -> anyhow::Result<()> {
         let elapsed = report.elapsed.as_secs_f64();
         let counter = &report.stats.counter;
         let summary = Summary {
@@ -65,6 +77,7 @@ impl BenchReporter for JsonReporter {
                 latency,
                 status: report.status_dist.iter().map(|(k, &v)| (k.to_string(), v)).collect(),
                 errors: report.error_dist.iter().map(|(k, &v)| (k.clone(), v)).collect(),
+                comparison: comparison.cloned(),
             },
         )?;
 
@@ -131,6 +144,8 @@ struct Report {
     latency: Option<Latency>,
     status: BTreeMap<String, u64>,
     errors: BTreeMap<String, u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comparison: Option<Comparison>,
 }
 
 fn not_normal_f64(v: &f64) -> bool {

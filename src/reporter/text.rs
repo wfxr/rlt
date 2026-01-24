@@ -9,6 +9,7 @@ use tabled::{
     settings::{Alignment, Color, Margin, Style, themes::Colorization},
 };
 
+use crate::baseline::{Comparison, Delta, DeltaStatus, LatencyDeltas, Verdict};
 use crate::duration::TimeUnit;
 use crate::{
     duration::{DurationExt, FormattedDuration},
@@ -23,11 +24,23 @@ pub struct TextReporter;
 
 impl super::BenchReporter for TextReporter {
     fn print(&self, w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
+        self.print(w, report, None)
+    }
+}
+
+impl TextReporter {
+    /// Print report with optional baseline comparison.
+    pub fn print(
+        &self,
+        w: &mut dyn Write,
+        report: &BenchReport,
+        comparison: Option<&Comparison>,
+    ) -> anyhow::Result<()> {
         print_summary(w, report)?;
 
         if report.stats.counter.iters > 0 {
             writeln!(w)?;
-            print_latency(w, &report.hist)?;
+            print_latency(w, &report.hist, comparison)?;
 
             writeln!(w)?;
             print_status(w, &report.status_dist)?;
@@ -36,6 +49,12 @@ impl super::BenchReporter for TextReporter {
         if !report.error_dist.is_empty() {
             writeln!(w)?;
             print_error(w, report)?;
+        }
+
+        // Print comparison verdict if available
+        if let Some(cmp) = comparison {
+            writeln!(w)?;
+            print_comparison_verdict(w, cmp)?;
         }
 
         Ok(())
@@ -145,7 +164,7 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> 
     Ok(())
 }
 
-fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram) -> anyhow::Result<()> {
+fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram, comparison: Option<&Comparison>) -> anyhow::Result<()> {
     writeln!(w, "{}", "Latencies".h1())?;
     if hist.is_empty() {
         return Ok(());
@@ -157,6 +176,15 @@ fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram) -> anyhow::Result<(
     writeln!(w, "{}", "  Stats".h2())?;
     print_latency_stats(w, hist, u)?;
     writeln!(w)?;
+
+    // Print latency comparison if available
+    if let Some(cmp) = comparison
+        && let Some(ref deltas) = cmp.latency
+    {
+        writeln!(w, "{}", format!("  Comparison (baseline: {})", cmp.baseline_name).h2())?;
+        print_latency_comparison(w, deltas)?;
+        writeln!(w)?;
+    }
 
     writeln!(w, "{}", "  Percentiles".h2())?;
     print_latency_percentiles(w, hist, u)?;
@@ -221,7 +249,7 @@ fn print_status(w: &mut dyn Write, status: &HashMap<Status, u64>) -> anyhow::Res
         .iter()
         .sorted_unstable_by_key(|&(_, cnt)| Reverse(cnt))
         .collect_vec();
-    writeln!(w, "{}", "Status distribution".h1())?;
+    writeln!(w, "{}", "Status Distribution".h1())?;
     if !status_v.is_empty() {
         let max = status_v.iter().map(|(_, iters)| iters).max().unwrap();
         let count_width = max.to_string().len();
@@ -248,7 +276,7 @@ fn print_error(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
         .collect_vec();
     let max = error_v.iter().map(|(_, iters)| iters).max().unwrap();
     let iters_width = max.to_string().len();
-    writeln!(w, "{}", "Error distribution".h1())?;
+    writeln!(w, "{}", "Error Distribution".h1())?;
     for (error, count) in error_v {
         writeln!(w, "{}", format!("  [{count:>iters_width$}] {error}").red())?;
     }
@@ -268,4 +296,88 @@ impl<T: AsRef<str>> ReportStyle for T {
     fn h2(&self) -> StyledContent<&str> {
         self.as_ref().bold().cyan()
     }
+}
+
+fn print_latency_comparison(w: &mut dyn Write, deltas: &LatencyDeltas) -> anyhow::Result<()> {
+    let rows = vec![
+        ("Avg", &deltas.mean),
+        ("Med", &deltas.median),
+        ("p90", &deltas.p90),
+        ("p99", &deltas.p99),
+        ("Max", &deltas.max),
+    ];
+
+    let data: Vec<Vec<String>> = vec![vec![
+        "Metric".into(),
+        "Current".into(),
+        "Baseline".into(),
+        "Change".into(),
+    ]]
+    .into_iter()
+    .chain(rows.into_iter().map(|(name, delta)| {
+        vec![
+            name.to_string(),
+            format_latency(delta.current),
+            format_latency(delta.baseline),
+            format_delta_change(delta),
+        ]
+    }))
+    .collect();
+
+    let mut table = Builder::from(data).build();
+    table
+        .with(Style::empty())
+        .with(Margin::new(4, 0, 0, 0))
+        .with(Alignment::right())
+        .with(Padding::new(2, 2, 0, 0))
+        .with(Colorization::exact([Color::BOLD], FirstRow))
+        .modify(FirstColumn, Alignment::left());
+    writeln!(w, "{}", table)?;
+    Ok(())
+}
+
+fn format_latency(secs: f64) -> String {
+    use std::time::Duration;
+    let d = Duration::from_secs_f64(secs);
+    let u = d.appropriate_unit();
+    format!("{:.2}", FormattedDuration::from(d, u))
+}
+
+fn format_delta_change(delta: &Delta) -> String {
+    match delta.status {
+        DeltaStatus::Unchanged => "no change".dim().to_string(),
+        DeltaStatus::Improved => {
+            let factor = format_factor(delta);
+            format!("{} faster", factor).green().to_string()
+        }
+        DeltaStatus::Regressed => {
+            let factor = format_factor(delta);
+            format!("{} slower", factor).red().to_string()
+        }
+    }
+}
+
+fn format_factor(delta: &Delta) -> String {
+    match delta.ratio {
+        Some(r) if r > 0.0 => {
+            // Always show factor >= 1.0
+            let factor = if r >= 1.0 { r } else { 1.0 / r };
+            format!("{:.2}x", factor)
+        }
+        _ => "N/A".to_string(),
+    }
+}
+
+fn print_comparison_verdict(w: &mut dyn Write, comparison: &Comparison) -> anyhow::Result<()> {
+    writeln!(w, "{}", "Baseline Comparison".h1())?;
+
+    let verdict_str = match comparison.verdict {
+        Verdict::Improved => "Performance has improved.".green().bold(),
+        Verdict::Regressed => "Performance has regressed.".red().bold(),
+        Verdict::Unchanged => "Performance is unchanged.".yellow(),
+        Verdict::Mixed => "Mixed results (some improved, some regressed).".yellow().bold(),
+    };
+
+    writeln!(w, "  {} (baseline: {})", verdict_str, comparison.baseline_name)?;
+    Ok(())
 }
