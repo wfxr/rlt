@@ -9,14 +9,14 @@ use tabled::{
     settings::{Alignment, Color, Margin, Style, themes::Colorization},
 };
 
-use crate::baseline::{Comparison, Delta, DeltaStatus, LatencyDeltas, Verdict};
+use crate::baseline::{Comparison, Delta, DeltaStatus, LatencyDeltas, RegressionMetric, Verdict};
 use crate::duration::TimeUnit;
 use crate::{
     duration::{DurationExt, FormattedDuration},
     histogram::{LatencyHistogram, PERCENTAGES},
     report::BenchReport,
     status::{Status, StatusKind},
-    util::{IntoAdjustedByte, TryIntoAdjustedByte},
+    util::{IntoAdjustedByte, TryIntoAdjustedByte, rate},
 };
 
 /// A text reporter for benchmark results.
@@ -40,7 +40,7 @@ impl TextReporter {
 
         if report.stats.counter.iters > 0 {
             writeln!(w)?;
-            print_latency(w, &report.hist, comparison)?;
+            print_latency(w, &report.hist)?;
 
             writeln!(w)?;
             print_status(w, &report.status_dist)?;
@@ -51,10 +51,12 @@ impl TextReporter {
             print_error(w, report)?;
         }
 
-        // Print comparison verdict if available
+        // Print baseline comparison if available
         if let Some(cmp) = comparison {
+            // Use the same time unit as latency section
+            let u = report.hist.median().appropriate_unit();
             writeln!(w)?;
-            print_comparison_verdict(w, cmp)?;
+            print_baseline_comparison(w, cmp, u)?;
         }
 
         Ok(())
@@ -136,17 +138,17 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> 
         vec![
             "Iters".into(),
             format!("{}", counter.iters),
-            format!("{:.2}/s", counter.iters as f64 / elapsed),
+            format!("{:.2}/s", rate(counter.iters, elapsed)),
         ],
         vec![
             "Items".into(),
             format!("{}", counter.items),
-            format!("{:.2}/s", counter.items as f64 / elapsed),
+            format!("{:.2}/s", rate(counter.items, elapsed)),
         ],
         vec![
             "Bytes".into(),
             format!("{:.2}", counter.bytes.adjusted()),
-            format!("{:.2}/s", (counter.bytes as f64 / elapsed).adjusted()?),
+            format!("{:.2}/s", rate(counter.bytes, elapsed).adjusted()?),
         ],
     ];
     let mut stats = Builder::from(stats).build();
@@ -164,7 +166,7 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> 
     Ok(())
 }
 
-fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram, comparison: Option<&Comparison>) -> anyhow::Result<()> {
+fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram) -> anyhow::Result<()> {
     writeln!(w, "{}", "Latencies".h1())?;
     if hist.is_empty() {
         return Ok(());
@@ -176,15 +178,6 @@ fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram, comparison: Option<
     writeln!(w, "{}", "  Stats".h2())?;
     print_latency_stats(w, hist, u)?;
     writeln!(w)?;
-
-    // Print latency comparison if available
-    if let Some(cmp) = comparison
-        && let Some(ref deltas) = cmp.latency
-    {
-        writeln!(w, "{}", format!("  Comparison (baseline: {})", cmp.baseline_name).h2())?;
-        print_latency_comparison(w, deltas)?;
-        writeln!(w)?;
-    }
 
     writeln!(w, "{}", "  Percentiles".h2())?;
     print_latency_percentiles(w, hist, u)?;
@@ -298,14 +291,23 @@ impl<T: AsRef<str>> ReportStyle for T {
     }
 }
 
-fn print_latency_comparison(w: &mut dyn Write, deltas: &LatencyDeltas) -> anyhow::Result<()> {
-    let rows = vec![
-        ("Avg", &deltas.mean),
-        ("Med", &deltas.median),
-        ("p90", &deltas.p90),
-        ("p99", &deltas.p99),
-        ("Max", &deltas.max),
+fn print_latency_comparison(
+    w: &mut dyn Write,
+    deltas: &LatencyDeltas,
+    u: TimeUnit,
+    regression_metrics: &[RegressionMetric],
+) -> anyhow::Result<()> {
+    let mut rows: Vec<(RegressionMetric, &Delta)> = vec![
+        (RegressionMetric::LatencyMean, &deltas.mean),
+        (RegressionMetric::LatencyMedian, &deltas.median),
     ];
+    if let Some(ref p90) = deltas.p90 {
+        rows.push((RegressionMetric::LatencyP90, p90));
+    }
+    if let Some(ref p99) = deltas.p99 {
+        rows.push((RegressionMetric::LatencyP99, p99));
+    }
+    rows.push((RegressionMetric::LatencyMax, &deltas.max));
 
     let data: Vec<Vec<String>> = vec![vec![
         "Metric".into(),
@@ -314,11 +316,11 @@ fn print_latency_comparison(w: &mut dyn Write, deltas: &LatencyDeltas) -> anyhow
         "Change".into(),
     ]]
     .into_iter()
-    .chain(rows.into_iter().map(|(name, delta)| {
+    .chain(rows.into_iter().map(|(metric, delta)| {
         vec![
-            name.to_string(),
-            format_latency(delta.current),
-            format_latency(delta.baseline),
+            format_metric_name(metric, regression_metrics),
+            format_latency(delta.current, u),
+            format_latency(delta.baseline, u),
             format_delta_change(delta),
         ]
     }))
@@ -331,15 +333,68 @@ fn print_latency_comparison(w: &mut dyn Write, deltas: &LatencyDeltas) -> anyhow
         .with(Alignment::right())
         .with(Padding::new(2, 2, 0, 0))
         .with(Colorization::exact([Color::BOLD], FirstRow))
-        .modify(FirstColumn, Alignment::left());
+        .modify(FirstColumn, Alignment::left())
+        .modify(FirstRow, Alignment::center());
     writeln!(w, "{}", table)?;
     Ok(())
 }
 
-fn format_latency(secs: f64) -> String {
+fn print_throughput_comparison(w: &mut dyn Write, cmp: &Comparison) -> anyhow::Result<()> {
+    let throughput = &cmp.throughput;
+    let regression_metrics = &cmp.regression_metrics;
+    let mut rows: Vec<(RegressionMetric, &Delta)> = vec![(RegressionMetric::ItersRate, &throughput.iters_rate)];
+    if let Some(ref items_rate) = throughput.items_rate {
+        rows.push((RegressionMetric::ItemsRate, items_rate));
+    }
+    if let Some(ref bytes_rate) = throughput.bytes_rate {
+        rows.push((RegressionMetric::BytesRate, bytes_rate));
+    }
+    rows.push((RegressionMetric::SuccessRatio, &cmp.success_ratio));
+
+    let data: Vec<Vec<String>> = vec![vec![
+        "Metric".into(),
+        "Current".into(),
+        "Baseline".into(),
+        "Change".into(),
+    ]]
+    .into_iter()
+    .chain(rows.into_iter().map(|(metric, delta)| {
+        vec![
+            format_metric_name(metric, regression_metrics),
+            format_rate(delta.current, metric),
+            format_rate(delta.baseline, metric),
+            format_delta_change(delta),
+        ]
+    }))
+    .collect();
+
+    let mut table = Builder::from(data).build();
+    table
+        .with(Style::empty())
+        .with(Margin::new(4, 0, 0, 0))
+        .with(Alignment::right())
+        .with(Padding::new(2, 2, 0, 0))
+        .with(Colorization::exact([Color::BOLD], FirstRow))
+        .modify(FirstColumn, Alignment::left())
+        .modify(FirstRow, Alignment::center());
+    writeln!(w, "{}", table)?;
+    Ok(())
+}
+
+fn format_rate(value: f64, metric: RegressionMetric) -> String {
+    match metric {
+        RegressionMetric::SuccessRatio => format!("{:.2}%", value * 100.0),
+        RegressionMetric::BytesRate => match value.adjusted() {
+            Ok(adjusted) => format!("{:.2}/s", adjusted),
+            Err(_) => format!("{:.2}/s", value),
+        },
+        _ => format!("{:.2}/s", value),
+    }
+}
+
+fn format_latency(secs: f64, u: TimeUnit) -> String {
     use std::time::Duration;
     let d = Duration::from_secs_f64(secs);
-    let u = d.appropriate_unit();
     format!("{:.2}", FormattedDuration::from(d, u))
 }
 
@@ -348,13 +403,22 @@ fn format_delta_change(delta: &Delta) -> String {
         DeltaStatus::Unchanged => "no change".dim().to_string(),
         DeltaStatus::Improved => {
             let factor = format_factor(delta);
-            format!("{} faster", factor).green().to_string()
+            format!("{} better", factor).green().to_string()
         }
         DeltaStatus::Regressed => {
             let factor = format_factor(delta);
-            format!("{} slower", factor).red().to_string()
+            format!("{} worse", factor).red().to_string()
         }
     }
+}
+
+fn format_metric_name(metric: RegressionMetric, regression_metrics: &[RegressionMetric]) -> String {
+    let prefix = if regression_metrics.contains(&metric) {
+        "* "
+    } else {
+        "  "
+    };
+    format!("{}{}", prefix, metric.display_name())
 }
 
 fn format_factor(delta: &Delta) -> String {
@@ -368,16 +432,39 @@ fn format_factor(delta: &Delta) -> String {
     }
 }
 
-fn print_comparison_verdict(w: &mut dyn Write, comparison: &Comparison) -> anyhow::Result<()> {
+fn print_baseline_comparison(w: &mut dyn Write, cmp: &Comparison, u: TimeUnit) -> anyhow::Result<()> {
     writeln!(w, "{}", "Baseline Comparison".h1())?;
 
-    let verdict_str = match comparison.verdict {
-        Verdict::Improved => "Performance has improved.".green().bold(),
-        Verdict::Regressed => "Performance has regressed.".red().bold(),
-        Verdict::Unchanged => "Performance is unchanged.".yellow(),
-        Verdict::Mixed => "Mixed results (some improved, some regressed).".yellow().bold(),
+    // Summary line
+    let verdict_str = match cmp.verdict {
+        Verdict::Improved => "improved".green().bold(),
+        Verdict::Regressed => "regressed".red().bold(),
+        Verdict::Unchanged => "unchanged".yellow(),
+        Verdict::Mixed => "mixed".yellow().bold(),
     };
+    writeln!(
+        w,
+        "  Compared with baseline {} using {:.1}% noise threshold ({})",
+        cmp.baseline_name.clone().green().bold(),
+        cmp.noise_threshold_percent,
+        verdict_str
+    )?;
+    writeln!(w)?;
 
-    writeln!(w, "  {} (baseline: {})", verdict_str, comparison.baseline_name)?;
+    // Throughput comparison
+    writeln!(w, "{}", "  Throughput".h2())?;
+    print_throughput_comparison(w, cmp)?;
+    writeln!(w)?;
+
+    // Latency comparison (if available)
+    if let Some(ref deltas) = cmp.latency {
+        writeln!(w, "{}", "  Latency".h2())?;
+        print_latency_comparison(w, deltas, u, &cmp.regression_metrics)?;
+        writeln!(w)?;
+    }
+
+    // Footnote
+    writeln!(w, "  {}", "* Metrics used for verdict calculation".italic())?;
+
     Ok(())
 }

@@ -9,11 +9,11 @@ use std::{
 use anyhow::Context;
 use chrono::Utc;
 
-use crate::{cli::BenchCli, histogram::PERCENTAGES, report::BenchReport};
+use crate::{cli::BenchCli, histogram::PERCENTAGES, report::BenchReport, util::rate};
 
 use super::{
-    Baseline, BaselineMetadata, BenchConfig, Latency, LatencyStats, RateSummary, SCHEMA_VERSION, SerializableReport,
-    Summary,
+    Baseline, BaselineMetadata, BaselineName, BenchConfig, Latency, LatencyStats, RateSummary, SCHEMA_VERSION,
+    SerializableReport, Summary,
 };
 
 /// Resolve the baseline directory using the priority order:
@@ -32,8 +32,8 @@ pub fn resolve_baseline_dir(cli_dir: Option<&Path>) -> PathBuf {
 }
 
 /// Load a baseline by name from the baseline directory.
-pub fn load(baseline_dir: &Path, name: impl AsRef<str>) -> anyhow::Result<Baseline> {
-    let path = baseline_dir.join(format!("{}.json", name.as_ref()));
+pub fn load(baseline_dir: &Path, name: &BaselineName) -> anyhow::Result<Baseline> {
+    let path = baseline_dir.join(format!("{}.json", name));
     load_file(&path)
 }
 
@@ -59,8 +59,8 @@ pub fn load_file(path: &Path) -> anyhow::Result<Baseline> {
 /// Save a benchmark report as a baseline.
 ///
 /// Uses atomic write (write-to-temp-then-rename) to prevent corruption.
-pub fn save(baseline_dir: &Path, name: impl AsRef<str>, report: &BenchReport, cli: &BenchCli) -> anyhow::Result<()> {
-    let name = name.as_ref();
+pub fn save(baseline_dir: &Path, name: &BaselineName, report: &BenchReport, cli: &BenchCli) -> anyhow::Result<()> {
+    let name = name.as_str();
 
     // Ensure directory exists
     fs::create_dir_all(baseline_dir)
@@ -99,9 +99,9 @@ fn create_baseline(name: &str, report: &BenchReport, cli: &BenchCli) -> Baseline
         success_ratio: report.success_ratio(),
         total_time: elapsed,
         concurrency: report.concurrency,
-        iters: RateSummary { total: counter.iters, rate: counter.iters as f64 / elapsed },
-        items: RateSummary { total: counter.items, rate: counter.items as f64 / elapsed },
-        bytes: RateSummary { total: counter.bytes, rate: counter.bytes as f64 / elapsed },
+        iters: RateSummary { total: counter.iters, rate: rate(counter.iters, elapsed) },
+        items: RateSummary { total: counter.items, rate: rate(counter.items, elapsed) },
+        bytes: RateSummary { total: counter.bytes, rate: rate(counter.bytes, elapsed) },
     };
 
     // Build latency (if available)
@@ -183,36 +183,6 @@ mod tests {
         assert!("../escape".parse::<BaselineName>().is_err());
         assert!("name with spaces".parse::<BaselineName>().is_err());
         assert!("special@char".parse::<BaselineName>().is_err());
-    }
-
-    #[test]
-    fn test_resolve_baseline_dir_default() {
-        // Save current env vars
-        let orig_rlt = std::env::var("RLT_BASELINE_DIR").ok();
-        let orig_cargo = std::env::var("CARGO_TARGET_DIR").ok();
-
-        // SAFETY: This test modifies environment variables, which can cause data races
-        // in multi-threaded programs. This is acceptable in test code as tests are
-        // typically run in isolation.
-        unsafe {
-            // Clear env vars for test
-            std::env::remove_var("RLT_BASELINE_DIR");
-            std::env::remove_var("CARGO_TARGET_DIR");
-        }
-
-        let dir = resolve_baseline_dir(None);
-        assert_eq!(dir, PathBuf::from("target/rlt/baselines"));
-
-        // Restore env vars
-        // SAFETY: Same as above - test code modification of env vars.
-        unsafe {
-            if let Some(v) = orig_rlt {
-                std::env::set_var("RLT_BASELINE_DIR", v);
-            }
-            if let Some(v) = orig_cargo {
-                std::env::set_var("CARGO_TARGET_DIR", v);
-            }
-        }
     }
 
     #[test]

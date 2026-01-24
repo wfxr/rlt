@@ -3,13 +3,14 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::report::BenchReport;
+use crate::{report::BenchReport, util::rate};
 
 use super::Baseline;
 
 /// Metrics that can be used for regression detection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, clap::ValueEnum, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, clap::ValueEnum, strum::Display)]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RegressionMetric {
     /// Iterations per second.
     ItersRate,
@@ -29,6 +30,23 @@ pub enum RegressionMetric {
     LatencyMax,
     /// Success ratio.
     SuccessRatio,
+}
+
+impl RegressionMetric {
+    /// Returns the display name for this metric in comparison tables.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::ItersRate => "Iters/s",
+            Self::ItemsRate => "Items/s",
+            Self::BytesRate => "Bytes/s",
+            Self::SuccessRatio => "Success",
+            Self::LatencyMean => "Avg",
+            Self::LatencyMedian => "Med",
+            Self::LatencyP90 => "p90",
+            Self::LatencyP99 => "p99",
+            Self::LatencyMax => "Max",
+        }
+    }
 }
 
 /// Delta value representation - either percentage change or percentage points.
@@ -79,10 +97,12 @@ pub struct LatencyDeltas {
     pub mean: Delta,
     /// Median latency comparison.
     pub median: Delta,
-    /// 90th percentile latency comparison.
-    pub p90: Delta,
-    /// 99th percentile latency comparison.
-    pub p99: Delta,
+    /// 90th percentile latency comparison (if available in baseline).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub p90: Option<Delta>,
+    /// 99th percentile latency comparison (if available in baseline).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub p99: Option<Delta>,
     /// Maximum latency comparison.
     pub max: Delta,
 }
@@ -126,7 +146,10 @@ pub struct Comparison {
     /// Noise threshold used for comparison.
     pub noise_threshold_percent: f64,
     /// Metrics considered for verdict calculation.
-    pub regression_metrics: Vec<String>,
+    pub regression_metrics: Vec<RegressionMetric>,
+    /// Metrics that were skipped (unavailable for comparison).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skipped_metrics: Vec<RegressionMetric>,
     /// Overall verdict.
     pub verdict: Verdict,
     /// Throughput comparisons.
@@ -152,13 +175,13 @@ pub fn compare(
     // Calculate throughput deltas
     let throughput = ThroughputDeltas {
         iters_rate: calculate_throughput_delta(
-            counter.iters as f64 / elapsed,
+            rate(counter.iters, elapsed),
             baseline_summary.iters.rate,
             noise_threshold,
         ),
         items_rate: if counter.items > 0 || baseline_summary.items.total > 0 {
             Some(calculate_throughput_delta(
-                counter.items as f64 / elapsed,
+                rate(counter.items, elapsed),
                 baseline_summary.items.rate,
                 noise_threshold,
             ))
@@ -167,7 +190,7 @@ pub fn compare(
         },
         bytes_rate: if counter.bytes > 0 || baseline_summary.bytes.total > 0 {
             Some(calculate_throughput_delta(
-                counter.bytes as f64 / elapsed,
+                rate(counter.bytes, elapsed),
                 baseline_summary.bytes.rate,
                 noise_threshold,
             ))
@@ -191,16 +214,12 @@ pub fn compare(
                 baseline_latency.stats.median,
                 noise_threshold,
             ),
-            p90: calculate_latency_delta(
-                report.hist.value_at_quantile(0.90).as_secs_f64(),
-                *baseline_latency.percentiles.get("p90").unwrap_or(&0.0),
-                noise_threshold,
-            ),
-            p99: calculate_latency_delta(
-                report.hist.value_at_quantile(0.99).as_secs_f64(),
-                *baseline_latency.percentiles.get("p99").unwrap_or(&0.0),
-                noise_threshold,
-            ),
+            p90: baseline_latency.percentiles.get("p90").map(|&v| {
+                calculate_latency_delta(report.hist.value_at_quantile(0.90).as_secs_f64(), v, noise_threshold)
+            }),
+            p99: baseline_latency.percentiles.get("p99").map(|&v| {
+                calculate_latency_delta(report.hist.value_at_quantile(0.99).as_secs_f64(), v, noise_threshold)
+            }),
             max: calculate_latency_delta(
                 report.hist.max().as_secs_f64(),
                 baseline_latency.stats.max,
@@ -214,14 +233,15 @@ pub fn compare(
         calculate_success_ratio_delta(report.success_ratio(), baseline_summary.success_ratio, noise_threshold);
 
     // Calculate verdict based on regression metrics
-    let verdict = calculate_verdict(&throughput, latency.as_ref(), &success_ratio, regression_metrics);
+    let (verdict, skipped) = calculate_verdict(&throughput, latency.as_ref(), &success_ratio, regression_metrics);
 
     Comparison {
         baseline_name: baseline.metadata.name.clone(),
         baseline_created_at: baseline.metadata.created_at,
         schema_version: baseline.schema_version,
         noise_threshold_percent: noise_threshold,
-        regression_metrics: regression_metrics.iter().map(|m| m.to_string()).collect(),
+        regression_metrics: regression_metrics.to_vec(),
+        skipped_metrics: skipped,
         verdict,
         throughput,
         latency,
@@ -316,13 +336,16 @@ fn calculate_delta(current: f64, baseline: f64, noise_threshold: f64, higher_is_
 }
 
 /// Calculate the overall verdict based on regression metrics.
+///
+/// Returns the verdict and a list of metrics that were skipped (unavailable).
 fn calculate_verdict(
     throughput: &ThroughputDeltas,
     latency: Option<&LatencyDeltas>,
     success_ratio: &Delta,
     metrics: &[RegressionMetric],
-) -> Verdict {
+) -> (Verdict, Vec<RegressionMetric>) {
     let mut statuses: Vec<DeltaStatus> = Vec::new();
+    let mut skipped: Vec<RegressionMetric> = Vec::new();
 
     for metric in metrics {
         let status = match metric {
@@ -331,31 +354,29 @@ fn calculate_verdict(
             RegressionMetric::BytesRate => throughput.bytes_rate.as_ref().map(|d| d.status),
             RegressionMetric::LatencyMean => latency.map(|l| l.mean.status),
             RegressionMetric::LatencyMedian => latency.map(|l| l.median.status),
-            RegressionMetric::LatencyP90 => latency.map(|l| l.p90.status),
-            RegressionMetric::LatencyP99 => latency.map(|l| l.p99.status),
+            RegressionMetric::LatencyP90 => latency.and_then(|l| l.p90.as_ref().map(|d| d.status)),
+            RegressionMetric::LatencyP99 => latency.and_then(|l| l.p99.as_ref().map(|d| d.status)),
             RegressionMetric::LatencyMax => latency.map(|l| l.max.status),
             RegressionMetric::SuccessRatio => Some(success_ratio.status),
         };
 
-        if let Some(s) = status {
-            statuses.push(s);
+        match status {
+            Some(s) => statuses.push(s),
+            None => skipped.push(*metric),
         }
-    }
-
-    // If no metrics could be computed, return Unchanged
-    if statuses.is_empty() {
-        return Verdict::Unchanged;
     }
 
     let has_improved = statuses.contains(&DeltaStatus::Improved);
     let has_regressed = statuses.contains(&DeltaStatus::Regressed);
 
-    match (has_improved, has_regressed) {
+    let verdict = match (has_improved, has_regressed) {
         (true, true) => Verdict::Mixed,
         (true, false) => Verdict::Improved,
         (false, true) => Verdict::Regressed,
         (false, false) => Verdict::Unchanged,
-    }
+    };
+
+    (verdict, skipped)
 }
 
 #[cfg(test)]
@@ -417,8 +438,9 @@ mod tests {
             status: DeltaStatus::Unchanged,
         };
 
-        let verdict = calculate_verdict(&throughput, None, &success_ratio, &[RegressionMetric::ItersRate]);
+        let (verdict, skipped) = calculate_verdict(&throughput, None, &success_ratio, &[RegressionMetric::ItersRate]);
         assert_eq!(verdict, Verdict::Improved);
+        assert!(skipped.is_empty());
     }
 
     #[test]
@@ -442,12 +464,13 @@ mod tests {
             status: DeltaStatus::Regressed,
         };
 
-        let verdict = calculate_verdict(
+        let (verdict, skipped) = calculate_verdict(
             &throughput,
             None,
             &success_ratio,
             &[RegressionMetric::ItersRate, RegressionMetric::SuccessRatio],
         );
         assert_eq!(verdict, Verdict::Mixed);
+        assert!(skipped.is_empty());
     }
 }

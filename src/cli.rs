@@ -102,7 +102,7 @@ use std::{
 };
 
 use clap::{
-    Parser, ValueEnum,
+    ArgGroup, Parser, ValueEnum,
     builder::{
         Styles,
         styling::{AnsiColor, Effects},
@@ -154,7 +154,8 @@ const DEFAULT_REGRESSION_METRICS: &[RegressionMetric] = &[
         .usage(AnsiColor::Yellow.on_default() | Effects::BOLD)
         .literal(AnsiColor::Green.on_default() | Effects::BOLD)
         .placeholder(AnsiColor::Cyan.on_default())
-    )
+    ),
+    group = ArgGroup::new("baseline_source").args(["baseline", "baseline_file"]),
 )]
 #[allow(missing_docs)]
 pub struct BenchCli {
@@ -245,13 +246,13 @@ pub struct BenchCli {
     /// Noise threshold for comparison (percentage, e.g., 1.0 means 1%)
     ///
     /// Changes within this threshold are considered noise and reported as "unchanged"
-    #[clap(long, default_value = "1.0")]
+    #[clap(long, default_value = "1.0", value_parser = parse_noise_threshold)]
     pub noise_threshold: f64,
 
     /// Fail the benchmark if regression is detected (for CI/CD integration)
     ///
-    /// Exit code 1 if verdict is 'regressed' or 'mixed'
-    #[clap(long)]
+    /// Returns an error if verdict is 'regressed' or 'mixed'.
+    #[clap(long, requires = "baseline_source")]
     pub fail_on_regression: bool,
 
     /// Metrics to consider for verdict calculation and regression detection
@@ -280,6 +281,17 @@ impl BenchCli {
             _ => Collector::Tui,
         }
     }
+}
+
+fn parse_noise_threshold(s: &str) -> Result<f64, String> {
+    let v: f64 = s.parse().map_err(|e| format!("{e}"))?;
+    if !v.is_finite() {
+        return Err("noise threshold must be a finite number".to_string());
+    }
+    if v < 0.0 {
+        return Err("noise threshold must be non-negative".to_string());
+    }
+    Ok(v)
 }
 
 /// The type of iteration report collector.
@@ -350,6 +362,18 @@ where
     // Compute comparison using pre-loaded baseline
     let cmp = baseline.map(|b| baseline::compare(&report, &b, cli.noise_threshold, &cli.regression_metrics));
 
+    // Warn about skipped metrics
+    #[cfg(feature = "tracing")]
+    if let Some(ref c) = cmp
+        && !c.skipped_metrics.is_empty()
+    {
+        let skipped: Vec<_> = c.skipped_metrics.iter().map(|m| m.to_string()).collect();
+        log::warn!(
+            "Some regression metrics were unavailable and skipped: {}",
+            skipped.join(", ")
+        );
+    }
+
     // Print report with comparison
     let mut output: Box<dyn std::io::Write> = match cli.output_file {
         Some(ref path) => Box::new(File::create(path)?),
@@ -364,7 +388,8 @@ where
     // Save baseline if requested (after comparison, so we can compare-then-save)
     if let Some(ref name) = cli.save_baseline {
         baseline::save(&baseline_dir, name, &report, &cli)?;
-        eprintln!(
+        #[cfg(feature = "tracing")]
+        log::info!(
             "Baseline '{}' saved to {}",
             name,
             baseline_dir.join(format!("{}.json", name)).display()

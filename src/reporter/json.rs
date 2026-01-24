@@ -1,4 +1,4 @@
-use crate::{baseline::Comparison, histogram::PERCENTAGES, report::BenchReport};
+use crate::{baseline::Comparison, histogram::PERCENTAGES, report::BenchReport, util::rate};
 
 use super::BenchReporter;
 
@@ -31,18 +31,22 @@ impl JsonReporter {
 
             iters: ItersSummary {
                 total: counter.iters,
-                rate: counter.iters as f64 / elapsed,
+                rate: rate(counter.iters, elapsed),
                 bytes_per_iter: counter.bytes.checked_div(counter.iters),
             },
 
             items: ItemsSummary {
                 total: counter.items,
-                rate: counter.items as f64 / elapsed,
-                items_per_iter: counter.items as f64 / counter.iters as f64,
+                rate: rate(counter.items, elapsed),
+                items_per_iter: if counter.iters > 0 {
+                    counter.items as f64 / counter.iters as f64
+                } else {
+                    0.0
+                },
                 bytes_per_item: counter.bytes.checked_div(counter.items),
             },
 
-            bytes: BytesSummary { total: counter.bytes, rate: counter.bytes as f64 / elapsed },
+            bytes: BytesSummary { total: counter.bytes, rate: rate(counter.bytes, elapsed) },
         };
 
         let latency = if report.hist.is_empty() {
