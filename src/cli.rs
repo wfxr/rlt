@@ -120,6 +120,24 @@ use crate::{
     runner::{BenchOpts, BenchSuite, Runner},
 };
 
+/// Error indicating a performance regression was detected.
+///
+/// This error is returned by [`run`] when `--fail-on-regression` is set
+/// and the comparison verdict is `Regressed` or `Mixed`.
+#[derive(Debug, Clone)]
+pub struct RegressionError {
+    /// The comparison verdict that triggered this error.
+    pub verdict: Verdict,
+}
+
+impl std::fmt::Display for RegressionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Performance regression detected: {:?}", self.verdict)
+    }
+}
+
+impl std::error::Error for RegressionError {}
+
 /// Default regression metrics for baseline comparison.
 const DEFAULT_REGRESSION_METRICS: &[RegressionMetric] = &[
     RegressionMetric::ItersRate,
@@ -215,8 +233,6 @@ pub struct BenchCli {
     pub baseline: Option<BaselineName>,
 
     /// Load baseline from a JSON file for comparison
-    ///
-    /// Supports both baseline format (with metadata) and plain JSON report format.
     #[clap(long, conflicts_with = "baseline")]
     pub baseline_file: Option<PathBuf>,
 
@@ -355,12 +371,12 @@ where
         );
     }
 
-    // Handle regression exit code for CI
+    // Handle regression for CI
     if cli.fail_on_regression
         && let Some(ref cmp) = cmp
         && matches!(cmp.verdict, Verdict::Regressed | Verdict::Mixed)
     {
-        std::process::exit(1);
+        return Err(RegressionError { verdict: cmp.verdict }.into());
     }
 
     Ok(())

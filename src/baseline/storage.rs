@@ -38,69 +38,22 @@ pub fn load(baseline_dir: &Path, name: impl AsRef<str>) -> anyhow::Result<Baseli
 }
 
 /// Load a baseline from a file path.
-///
-/// This function supports both:
-/// 1. Baseline format (with `schema_version` and `metadata`)
-/// 2. Plain JSON report format (output from `-o json`, without metadata)
 pub fn load_file(path: &Path) -> anyhow::Result<Baseline> {
     let file = File::open(path).with_context(|| format!("Failed to open baseline file: {}", path.display()))?;
     let reader = BufReader::new(file);
 
-    // First try to parse as a full baseline
-    let value: serde_json::Value = serde_json::from_reader(reader)
-        .with_context(|| format!("Failed to parse baseline JSON: {}", path.display()))?;
+    let baseline: Baseline = serde_json::from_reader(reader)
+        .with_context(|| format!("Failed to parse baseline file: {}", path.display()))?;
 
-    // Check if this is a full baseline (has schema_version) or a plain report
-    match value.get("schema_version") {
-        Some(_) => {
-            // Full baseline format
-            let baseline: Baseline = serde_json::from_value(value)
-                .with_context(|| format!("Failed to deserialize baseline: {}", path.display()))?;
-
-            if baseline.schema_version > SCHEMA_VERSION {
-                eprintln!(
-                    "Warning: Baseline was created with a newer schema version ({}), attempting best-effort parsing",
-                    baseline.schema_version
-                );
-            }
-
-            Ok(baseline)
-        }
-        None => {
-            // Plain JSON report format - convert to baseline with default metadata
-            eprintln!(
-                "Warning: Loading plain JSON report as baseline (no metadata). Comparability checks will be skipped."
-            );
-
-            let report: SerializableReport = serde_json::from_value(value)
-                .with_context(|| format!("Failed to deserialize plain report: {}", path.display()))?;
-
-            // Create default metadata from the report
-            let name = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-
-            Ok(Baseline {
-                schema_version: SCHEMA_VERSION,
-                metadata: BaselineMetadata {
-                    name,
-                    created_at: Utc::now(),
-                    rlt_version: "unknown".to_string(),
-                    bench_config: BenchConfig {
-                        concurrency: report.summary.concurrency,
-                        duration_secs: None,
-                        iterations: None,
-                        warmup: 0,
-                        rate_limit: None,
-                        actual_duration_secs: report.summary.total_time,
-                    },
-                },
-                report,
-            })
-        }
+    #[cfg(feature = "tracing")]
+    if baseline.schema_version > SCHEMA_VERSION {
+        log::warn!(
+            "Baseline was created with a newer schema version ({}), attempting best-effort parsing",
+            baseline.schema_version
+        );
     }
+
+    Ok(baseline)
 }
 
 /// Save a benchmark report as a baseline.

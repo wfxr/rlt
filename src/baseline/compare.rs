@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::report::BenchReport;
 
-use super::{Baseline, SCHEMA_VERSION};
+use super::Baseline;
 
 /// Metrics that can be used for regression detection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, clap::ValueEnum, strum::Display)]
@@ -219,7 +219,7 @@ pub fn compare(
     Comparison {
         baseline_name: baseline.metadata.name.clone(),
         baseline_created_at: baseline.metadata.created_at,
-        schema_version: SCHEMA_VERSION,
+        schema_version: baseline.schema_version,
         noise_threshold_percent: noise_threshold,
         regression_metrics: regression_metrics.iter().map(|m| m.to_string()).collect(),
         verdict,

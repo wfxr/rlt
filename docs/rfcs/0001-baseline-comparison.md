@@ -112,7 +112,6 @@ Baselines are stored as JSON files with schema versioning:
 - **No command recording**: The baseline format does not record the original command line to avoid accidentally persisting sensitive information (tokens, passwords, API keys).
 - **Overwrite by default**: `--save-baseline` overwrites existing baselines without requiring `--force`, matching criterion-rs behavior.
 - **Atomic writes**: Baseline files are written atomically using write-to-temp-then-rename to prevent corruption.
-- **Plain JSON support**: `--baseline-file` accepts both baseline format and plain JSON report format.
 
 ### 3. Comparability Validation
 
