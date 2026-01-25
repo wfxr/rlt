@@ -38,17 +38,17 @@ const SECOND: Duration = Duration::from_secs(1);
 /// A report collector with real-time TUI support.
 pub struct TuiCollector {
     /// The benchmark options.
-    pub bench_opts: BenchOpts,
+    pub(crate) bench_opts: BenchOpts,
     /// Refresh rate for the tui collector, in frames per second (fps)
-    pub fps: NonZeroU8,
+    pub(crate) fps: NonZeroU8,
     /// The receiver for iteration reports.
-    pub res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
+    pub(crate) res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
     /// The sender for pausing the benchmark runner.
-    pub pause: watch::Sender<bool>,
+    pub(crate) pause: watch::Sender<bool>,
     /// The cancellation token for the benchmark runner.
-    pub cancel: CancellationToken,
+    pub(crate) cancel: CancellationToken,
     /// Whether to quit the benchmark automatically when finished.
-    pub auto_quit: bool,
+    pub(crate) auto_quit: bool,
 
     /// The internal state of the TUI collector.
     state: TuiCollectorState,
@@ -63,7 +63,7 @@ struct TuiCollectorState {
 
 impl TuiCollector {
     /// Create a new TUI report collector.
-    pub fn new(
+    pub(crate) fn new(
         bench_opts: BenchOpts,
         fps: NonZeroU8,
         res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,

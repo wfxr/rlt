@@ -64,11 +64,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Current schema version for baseline files.
-pub const SCHEMA_VERSION: u32 = 1;
+pub(crate) const SCHEMA_VERSION: u32 = 1;
 
 /// Benchmark configuration for comparability checks.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BenchConfig {
+pub(crate) struct BenchConfig {
     /// Number of concurrent workers.
     pub concurrency: u32,
     /// Duration in seconds (if set).
@@ -88,7 +88,7 @@ pub struct BenchConfig {
 
 /// Baseline metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BaselineMetadata {
+pub(crate) struct BaselineMetadata {
     /// Name of the baseline.
     pub name: String,
     /// When the baseline was created.
@@ -101,7 +101,7 @@ pub struct BaselineMetadata {
 
 /// Summary statistics for serialization.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Summary {
+pub(crate) struct Summary {
     /// Success ratio (0.0 to 1.0).
     pub success_ratio: f64,
     /// Total elapsed time in seconds.
@@ -118,7 +118,7 @@ pub struct Summary {
 
 /// Rate-based summary (total and rate per second).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RateSummary {
+pub(crate) struct RateSummary {
     /// Total count.
     pub total: u64,
     /// Rate per second.
@@ -127,7 +127,7 @@ pub struct RateSummary {
 
 /// Latency statistics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LatencyStats {
+pub(crate) struct LatencyStats {
     /// Minimum latency in seconds.
     pub min: f64,
     /// Maximum latency in seconds.
@@ -142,7 +142,7 @@ pub struct LatencyStats {
 
 /// Latency data including stats, percentiles, and histogram.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Latency {
+pub(crate) struct Latency {
     /// Basic statistics.
     pub stats: LatencyStats,
     /// Percentile values (e.g., "p90" -> 0.003123).
@@ -153,7 +153,7 @@ pub struct Latency {
 
 /// Serializable form of BenchReport for JSON storage.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerializableReport {
+pub(crate) struct SerializableReport {
     /// Summary statistics.
     pub summary: Summary,
     /// Latency data (if available).
@@ -169,12 +169,12 @@ pub struct SerializableReport {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Baseline {
     /// Schema version for forward compatibility.
-    pub schema_version: u32,
+    pub(crate) schema_version: u32,
     /// Baseline metadata.
-    pub metadata: BaselineMetadata,
+    pub(crate) metadata: BaselineMetadata,
     /// Report data (flattened into the baseline).
     #[serde(flatten)]
-    pub report: SerializableReport,
+    pub(crate) report: SerializableReport,
 }
 
 impl Baseline {

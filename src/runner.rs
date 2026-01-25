@@ -31,7 +31,7 @@ use crate::{
 
 /// Core options for the benchmark runner.
 #[derive(Clone, Debug)]
-pub struct BenchOpts {
+pub(crate) struct BenchOpts {
     /// Start time of the benchmark.
     pub clock: Clock,
 
@@ -102,7 +102,7 @@ where
 
 /// A Benchmark runner with a given benchmark suite and control options.
 #[derive(Clone)]
-pub struct Runner<BS>
+pub(crate) struct Runner<BS>
 where
     BS: BenchSuite,
 {
