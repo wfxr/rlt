@@ -103,7 +103,7 @@ struct TuiCollectorState {
 
 impl TuiCollector {
     /// Create a new TUI report collector.
-    pub(crate) fn new(
+    pub fn new(
         bench_opts: BenchOpts,
         fps: NonZeroU8,
         res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
