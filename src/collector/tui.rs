@@ -37,7 +37,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::Line,
-    widgets::{BarChart, Block, Borders, Clear, Gauge, Padding, Paragraph, block::Title},
+    widgets::{BarChart, Block, Borders, Clear, Gauge, Padding, Paragraph},
 };
 use std::{collections::HashMap, fmt, io, num::NonZeroU8, time::Duration};
 use tokio::{
@@ -298,7 +298,7 @@ impl TuiCollector {
                     (Char('a'), _) => {
                         self.state.tm_win = *TimeWindow::variants()
                             .iter()
-                            .rfind(|&&ts| elapsed > ts.into())
+                            .rfind(|&&ts| elapsed > Duration::from(ts))
                             .unwrap_or(&TimeWindow::Second)
                     }
                     (Char('q'), _) | (Char('c'), KeyModifiers::CONTROL) => {
@@ -352,10 +352,7 @@ fn render_stats_timewin(frame: &mut Frame, area: Rect, stats: &RotateDiffWindowG
     render_stats(
         frame,
         area,
-        Title::from(Line::from(vec![
-            "Stats for ".into(),
-            format!("last {}", tw).yellow().bold(),
-        ])),
+        Line::from(vec!["Stats for ".into(), format!("last {}", tw).yellow().bold()]),
         &stats.counter,
         duration,
     );
@@ -365,7 +362,7 @@ fn render_stats_overall(frame: &mut Frame, area: Rect, counter: &Counter, elapse
     render_stats(frame, area, "Stats overall".into(), counter, elapsed);
 }
 
-fn render_stats(frame: &mut Frame, area: Rect, title: Title, counter: &Counter, elapsed: Duration) {
+fn render_stats(frame: &mut Frame, area: Rect, title: Line<'_>, counter: &Counter, elapsed: Duration) {
     let block = Block::new().title(title).borders(Borders::ALL);
 
     let [lhs, rhs] =
@@ -552,11 +549,11 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
     let chart = BarChart::default()
         .block(
             Block::new()
-                .title(Title::from(Line::from(vec![
+                .title(Line::from(vec![
                     "Latency histogram (".into(),
                     u.to_string().yellow().bold(),
                     ")".into(),
-                ])))
+                ]))
                 .borders(Borders::ALL),
         )
         .data(&data)
