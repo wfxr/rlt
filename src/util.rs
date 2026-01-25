@@ -22,3 +22,8 @@ impl IntoAdjustedByte for u64 {
         Byte::from_u64(self).get_appropriate_unit(UnitType::Binary)
     }
 }
+
+/// Calculate rate safely, returning 0.0 if elapsed is zero.
+pub fn rate(count: u64, elapsed: f64) -> f64 {
+    if elapsed > 0.0 { count as f64 / elapsed } else { 0.0 }
+}

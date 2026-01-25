@@ -1,4 +1,4 @@
-use crate::{histogram::PERCENTAGES, report::BenchReport};
+use crate::{baseline::Comparison, histogram::PERCENTAGES, report::BenchReport, util::rate};
 
 use super::BenchReporter;
 
@@ -9,7 +9,7 @@ use std::{collections::BTreeMap, io::Write};
 pub struct JsonReporter;
 
 impl BenchReporter for JsonReporter {
-    fn print(&self, w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
+    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> anyhow::Result<()> {
         let elapsed = report.elapsed.as_secs_f64();
         let counter = &report.stats.counter;
         let summary = Summary {
@@ -19,18 +19,22 @@ impl BenchReporter for JsonReporter {
 
             iters: ItersSummary {
                 total: counter.iters,
-                rate: counter.iters as f64 / elapsed,
+                rate: rate(counter.iters, elapsed),
                 bytes_per_iter: counter.bytes.checked_div(counter.iters),
             },
 
             items: ItemsSummary {
                 total: counter.items,
-                rate: counter.items as f64 / elapsed,
-                items_per_iter: counter.items as f64 / counter.iters as f64,
+                rate: rate(counter.items, elapsed),
+                items_per_iter: if counter.iters > 0 {
+                    counter.items as f64 / counter.iters as f64
+                } else {
+                    0.0
+                },
                 bytes_per_item: counter.bytes.checked_div(counter.items),
             },
 
-            bytes: BytesSummary { total: counter.bytes, rate: counter.bytes as f64 / elapsed },
+            bytes: BytesSummary { total: counter.bytes, rate: rate(counter.bytes, elapsed) },
         };
 
         let latency = if report.hist.is_empty() {
@@ -65,6 +69,7 @@ impl BenchReporter for JsonReporter {
                 latency,
                 status: report.status_dist.iter().map(|(k, &v)| (k.to_string(), v)).collect(),
                 errors: report.error_dist.iter().map(|(k, &v)| (k.clone(), v)).collect(),
+                comparison: comparison.cloned(),
             },
         )?;
 
@@ -96,7 +101,7 @@ struct ItersSummary {
 struct ItemsSummary {
     total: u64,
     rate: f64,
-    #[serde(skip_serializing_if = "not_normal_f64")]
+    #[serde(skip_serializing_if = "is_not_finite_f64")]
     items_per_iter: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     bytes_per_item: Option<u64>,
@@ -131,8 +136,10 @@ struct Report {
     latency: Option<Latency>,
     status: BTreeMap<String, u64>,
     errors: BTreeMap<String, u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comparison: Option<Comparison>,
 }
 
-fn not_normal_f64(v: &f64) -> bool {
-    !v.is_normal()
+fn is_not_finite_f64(v: &f64) -> bool {
+    !v.is_finite()
 }

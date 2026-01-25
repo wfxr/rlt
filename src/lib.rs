@@ -61,6 +61,7 @@ mod stats;
 mod status;
 mod util;
 
+pub mod baseline;
 pub mod cli;
 pub mod collector;
 pub mod reporter;

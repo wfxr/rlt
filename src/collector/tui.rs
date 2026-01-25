@@ -469,7 +469,7 @@ fn render_iter_hist(frame: &mut Frame, area: Rect, rwg: &RotateWindowGroup, tw: 
         TimeWindow::TenMin => &rwg.stats_by_10min,
     };
     let cols = win.iter().map(|w| w.counter.iters.to_string().len()).max().unwrap_or(0);
-    let data: Vec<(String, u64)> = win
+    let data = win
         .iter()
         .enumerate()
         .map(|(i, n)| {
@@ -481,9 +481,9 @@ fn render_iter_hist(frame: &mut Frame, area: Rect, rwg: &RotateWindowGroup, tw: 
             }
             (s, n.counter.iters)
         })
-        .collect();
+        .collect_vec();
 
-    let bar_num_iter_str: Vec<(&str, u64)> = data.iter().map(|(a, b)| (a.as_str(), *b)).collect();
+    let bar_num_iter_str = data.iter().map(|(a, b)| (a.as_str(), *b)).collect_vec();
     let bar_width = data
         .iter()
         .map(|(s, _)| s.chars().count())
@@ -508,7 +508,7 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
         .map(|(d, n)| (d.as_f64(u).to_string(), n))
         .collect_vec();
 
-    let data: Vec<(&str, u64)> = quantiles.iter().map(|(d, n)| (d.as_str(), *n)).collect();
+    let data = quantiles.iter().map(|(d, n)| (d.as_str(), *n)).collect_vec();
     let chart = BarChart::default()
         .block(
             Block::new()
