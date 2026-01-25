@@ -1,3 +1,15 @@
+//! Silent (headless) report collector.
+//!
+//! This module provides [`SilentCollector`], a non-interactive collector
+//! that aggregates benchmark results without any terminal output.
+//!
+//! # Use Cases
+//!
+//! - CI/CD pipelines where interactive TUI is not available
+//! - Scripted benchmarks where only the final report matters
+//! - Environments without terminal capabilities
+//! - When combined with [`JsonReporter`](crate::reporter::JsonReporter) for machine-readable output
+
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -12,7 +24,13 @@ use crate::{
     stats::IterStats,
 };
 
-/// A silent report collector that does not print anything.
+/// A silent report collector that aggregates results without terminal output.
+///
+/// This collector is useful in headless environments (CI/CD, scripts) where
+/// the interactive TUI is not needed. It still collects all statistics and
+/// produces the same [`BenchReport`](crate::BenchReport) as [`TuiCollector`](super::TuiCollector).
+///
+/// The collector responds to `Ctrl+C` for graceful cancellation.
 pub struct SilentCollector {
     bench_opts: BenchOpts,
     res_rx: UnboundedReceiver<Result<IterReport>>,

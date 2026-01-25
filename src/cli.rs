@@ -35,65 +35,25 @@
 //! Usage: mybench [OPTIONS] <URL>
 //!
 //! Arguments:
-//!   <URL>
-//!           Target URL
+//!   <URL>  Target URL
 //!
 //! Options:
-//!   -c, --concurrency <CONCURRENCY>
-//!           Number of workers to run concurrently
+//!   -c, --concurrency <N>      Number of workers to run concurrently [default: 1]
+//!   -n, --iterations <N>       Number of iterations to run
+//!   -d, --duration <DURATION>  Duration to run (e.g., 10s, 5m, 1h)
+//!   -w, --warmup <N>           Warm-up iterations [default: 0]
+//!   -r, --rate <RATE>          Rate limit (iterations/second)
+//!   -q, --quiet                Quiet mode (no TUI)
+//!   -o, --output <FORMAT>      Output format: text, json [default: text]
+//!   -O, --output-file <PATH>   Write report to file instead of stdout
+//!       --save-baseline <NAME> Save results as a named baseline
+//!       --baseline <NAME>      Compare against a named baseline
+//!       --fail-on-regression   Exit with error if regression detected
+//!   -h, --help                 Print help (use --help for full details)
+//! ```
 //!
-//!           [default: 1]
-//!
-//!   -n, --iterations <ITERATIONS>
-//!           Number of iterations
-//!
-//!           When set, benchmark stops after reaching the number of iterations.
-//!
-//!   -d, --duration <DURATION>
-//!           Duration to run the benchmark
-//!
-//!           When set, benchmark stops after reaching the duration.
-//!
-//!           Examples: -d 10s, -d 5m, -d 1h
-//!
-//!   -w, --warmup <WARMUP>
-//!           Number of warm-up iterations to run before the main benchmark
-//!
-//!           Warm-up iterations are not included in the final benchmark results.
-//!
-//!   -r, --rate <RATE>
-//!           Rate limit for benchmarking, in iterations per second (ips)
-//!
-//!           When set, benchmark will try to run at the specified rate.
-//!
-//!   -q, --quiet
-//!           Run benchmark in quiet mode
-//!
-//!           Implies --collector silent.
-//!
-//!       --collector <COLLECTOR>
-//!           Collector for the benchmark
-//!
-//!           Possible values:
-//!           - tui:    TUI based collector
-//!           - silent: Collector that does not print anything
-//!
-//!       --fps <FPS>
-//!           Refresh rate for the tui collector, in frames per second (fps)
-//!
-//!           [default: 32]
-//!
-//!   -o, --output <OUTPUT>
-//!           Output format for the report
-//!
-//!           [default: text]
-//!
-//!           Possible values:
-//!           - text: Report in plain text format
-//!           - json: Report in JSON format
-//!
-//!   -h, --help
-//!           Print help (see a summary with '-h')
+//! Run `mybench --help` to see all available options including baseline comparison,
+//! noise threshold, regression metrics, and TUI settings.
 use std::{
     fs::File,
     io::stdout,
