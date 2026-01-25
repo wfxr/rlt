@@ -199,6 +199,9 @@ where
                 // Setup is called once per worker
                 b.suite.setup(&mut state, worker).await?;
 
+                // Wait for all workers to complete setup before starting warmup
+                barrier.wait().await;
+
                 // Run warm-up iterations first
                 loop {
                     info.runner_seq = warmup_seq.fetch_add(1, Ordering::Relaxed);
