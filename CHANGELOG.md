@@ -1,9 +1,33 @@
 
-## [unreleased]
+## [0.4.0](https://github.com/wfxr/rlt/compare/v0.3.0..0.4.0) (2026-01-25)
+
+### 🚀 Features
+
+- Re-expose Clock module, BenchOpts, and collector constructors ( @wfxr)
+- Support baseline comparison [#39](https://github.com/wfxr/rlt/issues/39) ( @wfxr)
+- Simplify CLI definition with macros [#36](https://github.com/wfxr/rlt/issues/36) ( @wfxr)
+- Add --output-file option to write report to a file [#35](https://github.com/wfxr/rlt/issues/35) ( @yukinarit)
+
+### 🐛 Bug Fixes
+
+- Ignore errors during teardown phase [#37](https://github.com/wfxr/rlt/issues/37) ( @wfxr)
+
+### 🚜 Refactor
+
+- Tighten public API surface [#41](https://github.com/wfxr/rlt/issues/41) ( @wfxr)
 
 ### 📚 Documentation
 
-- Update cliff config and changelog format
+- Improve documentation across all modules ( @wfxr)
+- Improve README.md [#40](https://github.com/wfxr/rlt/issues/40) ( @wfxr)
+- Update rlt version in README.md [#34](https://github.com/wfxr/rlt/issues/34) ( @yukinarit)
+- Update cliff config and changelog format ( @wfxr)
+
+### ⚙️ Miscellaneous Tasks
+
+- Update dependencies [#43](https://github.com/wfxr/rlt/issues/43) ( @wfxr)
+- Upgrade Rust edition to 2024 [#38](https://github.com/wfxr/rlt/issues/38) ( @wfxr)
+- Replace copilot instructions with claude instructions ( @wfxr)
 
 ## [0.3.0](https://github.com/wfxr/rlt/compare/v0.2.1..v0.3.0) (2025-11-28)
 
