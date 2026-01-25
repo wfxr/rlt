@@ -21,7 +21,7 @@ pub struct SilentCollector {
 
 impl SilentCollector {
     /// Create a new silent report collector.
-    pub fn new(
+    pub(crate) fn new(
         bench_opts: BenchOpts,
         res_rx: UnboundedReceiver<Result<IterReport>>,
         cancel: CancellationToken,

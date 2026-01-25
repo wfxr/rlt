@@ -57,9 +57,10 @@ mod duration;
 mod histogram;
 mod report;
 mod runner;
-mod stats;
 mod status;
 mod util;
+
+pub(crate) mod stats;
 
 pub mod baseline;
 pub mod cli;
