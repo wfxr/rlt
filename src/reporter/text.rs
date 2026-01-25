@@ -1,3 +1,25 @@
+//! Human-readable text reporter with colored output.
+//!
+//! This module provides [`TextReporter`], which formats benchmark results
+//! as colorful, structured text suitable for terminal display.
+//!
+//! # Output Sections
+//!
+//! The text report includes:
+//! - **Summary**: Total time, concurrency, success rate, and throughput metrics
+//! - **Latencies**: Statistics (avg, min, med, max, stdev), percentiles, and histogram
+//! - **Status Distribution**: Breakdown of response status codes
+//! - **Error Distribution**: List of errors with counts (if any)
+//! - **Baseline Comparison**: Performance changes vs baseline (if provided)
+//!
+//! # Colors
+//!
+//! The reporter uses ANSI colors to highlight important information:
+//! - Green: Success indicators, positive values
+//! - Yellow: Warnings, section headers
+//! - Red: Errors, regressions
+//! - Cyan: Labels, informational text
+
 use crossterm::style::{StyledContent, Stylize};
 use itertools::Itertools;
 use std::{cmp::Reverse, collections::HashMap, io::Write};
@@ -19,7 +41,19 @@ use crate::{
     util::{IntoAdjustedByte, TryIntoAdjustedByte, rate},
 };
 
-/// A text reporter for benchmark results.
+/// A text reporter that outputs human-readable, colored benchmark results.
+///
+/// This reporter formats results using ANSI terminal colors and structured
+/// tables, making it ideal for interactive terminal use.
+///
+/// # Example
+///
+/// ```ignore
+/// use rlt::reporter::{BenchReporter, TextReporter};
+///
+/// let reporter = TextReporter;
+/// reporter.print(&mut std::io::stdout(), &report, None)?;
+/// ```
 pub struct TextReporter;
 
 impl super::BenchReporter for TextReporter {

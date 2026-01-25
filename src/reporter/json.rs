@@ -1,3 +1,24 @@
+//! JSON reporter for machine-readable benchmark output.
+//!
+//! This module provides [`JsonReporter`], which formats benchmark results
+//! as pretty-printed JSON suitable for parsing by other tools.
+//!
+//! # Output Structure
+//!
+//! The JSON output includes:
+//! - `summary`: Success ratio, total time, concurrency, and throughput metrics
+//! - `latency`: Statistics, percentiles, and histogram (omitted if no iterations)
+//! - `status`: Status code distribution
+//! - `errors`: Error message distribution (may be empty)
+//! - `comparison`: Baseline comparison data (if provided)
+//!
+//! # Use Cases
+//!
+//! - CI/CD pipelines for automated performance regression detection
+//! - Data analysis and visualization tools
+//! - Integration with monitoring systems
+//! - Historical performance tracking
+
 use crate::{baseline::Comparison, histogram::PERCENTAGES, report::BenchReport, util::rate};
 
 use super::BenchReporter;
@@ -5,7 +26,21 @@ use super::BenchReporter;
 use serde::Serialize;
 use std::{collections::BTreeMap, io::Write};
 
-/// A JSON reporter for benchmark results.
+/// A JSON reporter that outputs machine-readable benchmark results.
+///
+/// This reporter formats results as pretty-printed JSON, making it ideal
+/// for automated processing, data analysis, or integration with other tools.
+///
+/// # Example
+///
+/// ```ignore
+/// use rlt::reporter::{BenchReporter, JsonReporter};
+///
+/// let reporter = JsonReporter;
+/// let mut output = Vec::new();
+/// reporter.print(&mut output, &report, None)?;
+/// let json_string = String::from_utf8(output)?;
+/// ```
 pub struct JsonReporter;
 
 impl BenchReporter for JsonReporter {

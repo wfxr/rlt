@@ -1,3 +1,27 @@
+//! Terminal user interface (TUI) collector for real-time benchmark monitoring.
+//!
+//! This module provides [`TuiCollector`], an interactive terminal-based collector
+//! that displays real-time benchmark statistics with a rich visual interface.
+//!
+//! # Features
+//!
+//! - Real-time statistics display (iteration rate, throughput, latency)
+//! - Rolling window statistics at multiple time scales (1s, 10s, 1min, 10min)
+//! - Latency histogram with percentiles
+//! - Iteration histogram showing throughput over time
+//! - Status distribution breakdown
+//! - Progress bar with duration/iteration tracking
+//! - Pause/resume support
+//! - Optional log viewer (with `tracing` feature)
+//!
+//! # Keyboard Controls
+//!
+//! - `+`/`-`: Zoom time window in/out
+//! - `a`: Auto-select time window based on elapsed time
+//! - `p`: Pause/resume the benchmark
+//! - `l`: Toggle log viewer (requires `tracing` feature)
+//! - `q` or `Ctrl+C`: Quit the benchmark
+
 use anyhow::Result;
 use async_trait::async_trait;
 use crossterm::{
@@ -35,22 +59,38 @@ use crate::{
 
 const SECOND: Duration = Duration::from_secs(1);
 
-/// A report collector with real-time TUI support.
+/// A report collector with real-time terminal user interface (TUI) support.
+///
+/// This collector displays a live dashboard showing benchmark progress,
+/// statistics, and histograms. It supports interactive controls for
+/// pausing, zooming time windows, and viewing logs.
+///
+/// The TUI uses [ratatui](https://ratatui.rs) for rendering and updates
+/// at the configured frame rate.
+///
+/// # Display Sections
+///
+/// - **Stats for last N**: Rolling window statistics (configurable via `+`/`-`)
+/// - **Stats overall**: Cumulative statistics since benchmark start
+/// - **Status distribution**: Breakdown of response statuses
+/// - **Iteration histogram**: Bar chart of iterations per time bucket
+/// - **Latency histogram**: Distribution of response latencies with percentiles
+/// - **Progress**: Progress bar showing completion status
 pub struct TuiCollector {
-    /// The benchmark options.
+    /// The benchmark options (duration, iterations, concurrency, etc.).
     pub(crate) bench_opts: BenchOpts,
-    /// Refresh rate for the tui collector, in frames per second (fps)
+    /// Refresh rate in frames per second (fps).
     pub(crate) fps: NonZeroU8,
-    /// The receiver for iteration reports.
+    /// Channel receiver for iteration reports from workers.
     pub(crate) res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
-    /// The sender for pausing the benchmark runner.
+    /// Watch channel sender for pause/resume control.
     pub(crate) pause: watch::Sender<bool>,
-    /// The cancellation token for the benchmark runner.
+    /// Cancellation token for graceful shutdown.
     pub(crate) cancel: CancellationToken,
-    /// Whether to quit the benchmark automatically when finished.
+    /// Whether to exit automatically when the benchmark finishes.
     pub(crate) auto_quit: bool,
 
-    /// The internal state of the TUI collector.
+    /// Internal TUI state (time window selection, log state, etc.).
     state: TuiCollectorState,
 }
 
