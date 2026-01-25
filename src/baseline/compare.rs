@@ -121,8 +121,9 @@ pub struct ThroughputDeltas {
 }
 
 /// Overall verdict of the comparison.
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, strum::Display)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum Verdict {
     /// All regression metrics improved or unchanged, at least one improved.
     Improved,
@@ -144,7 +145,7 @@ pub struct Comparison {
     /// Schema version of the baseline.
     pub schema_version: u32,
     /// Noise threshold used for comparison.
-    pub noise_threshold_percent: f64,
+    pub noise_threshold: f64,
     /// Metrics considered for verdict calculation.
     pub regression_metrics: Vec<RegressionMetric>,
     /// Metrics that were skipped (unavailable for comparison).
@@ -239,7 +240,7 @@ pub fn compare(
         baseline_name: baseline.metadata.name.clone(),
         baseline_created_at: baseline.metadata.created_at,
         schema_version: baseline.schema_version,
-        noise_threshold_percent: noise_threshold,
+        noise_threshold,
         regression_metrics: regression_metrics.to_vec(),
         skipped_metrics: skipped,
         verdict,
@@ -344,8 +345,8 @@ fn calculate_verdict(
     success_ratio: &Delta,
     metrics: &[RegressionMetric],
 ) -> (Verdict, Vec<RegressionMetric>) {
-    let mut statuses: Vec<DeltaStatus> = Vec::new();
-    let mut skipped: Vec<RegressionMetric> = Vec::new();
+    let mut statuses = Vec::new();
+    let mut skipped = Vec::new();
 
     for metric in metrics {
         let status = match metric {

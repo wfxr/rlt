@@ -161,25 +161,41 @@ Based on regression metrics only (default or user-specified via `--regression-me
 
 #### Text Format
 
-```
-Latencies
-  Comparison (baseline: v1.0)
-      Metric      Current    Baseline    Change
-         Avg      1.82ms     1.99ms      1.09x faster
-         Med      1.71ms     1.82ms      1.06x faster
-         p90      2.98ms     3.12ms      1.05x faster
-         p99      5.89ms     6.23ms      1.06x faster
-         Max     82.34ms    89.23ms      1.08x faster
+After the main report sections, a "Baseline Comparison" section is displayed:
 
+```
 Baseline Comparison
-  Performance has improved. (baseline: v1.0)
+  Compared with baseline v1.0 using 1.0% noise threshold (improved)
+
+  Throughput
+        Metric      Current      Baseline      Change
+    * Iters/s      1234.56/s    1100.00/s     1.12x better
+
+  Latency
+        Metric      Current      Baseline      Change
+    *    Avg        1.82ms       1.99ms        1.09x better
+         Med        1.71ms       1.82ms        1.06x better
+    *    p90        2.98ms       3.12ms        1.05x better
+    *    p99        5.89ms       6.23ms        1.06x better
+         Max       82.34ms      89.23ms        1.08x better
+
+  Reliability
+        Metric      Current      Baseline      Change
+    * Success       99.50%       99.00%        +0.50pp
+
+  * Metrics selected for verdict calculation
 ```
 
-| Change | Display | Color |
-|--------|---------|-------|
-| Improved | `1.23x faster` | Green |
-| Regressed | `1.23x slower` | Red |
-| Within noise | `no change` | Dim |
+The `*` prefix marks metrics that are included in `--regression-metrics` and used for verdict calculation.
+
+| Metric Type | Change | Display | Color |
+|-------------|--------|---------|-------|
+| Throughput/Latency | Improved | `1.23x better` | Green |
+| Throughput/Latency | Regressed | `1.23x worse` | Red |
+| Throughput/Latency | Within noise | `no change` | Dim |
+| Success Ratio | Improved | `+0.50pp` | Green |
+| Success Ratio | Regressed | `-0.50pp` | Red |
+| Success Ratio | Within noise | `no change` | Dim |
 
 #### JSON Format
 
