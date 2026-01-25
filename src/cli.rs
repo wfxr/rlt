@@ -109,7 +109,6 @@ use clap::{
     },
 };
 use crossterm::tty::IsTty;
-use itertools::Itertools as _;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
@@ -117,7 +116,7 @@ use crate::{
     baseline::{self, BaselineName, RegressionMetric, Verdict},
     clock::Clock,
     collector::{ReportCollector, SilentCollector, TuiCollector},
-    reporter::{JsonReporter, TextReporter},
+    reporter::{BenchReporter, JsonReporter, TextReporter},
     runner::{BenchOpts, BenchSuite, Runner},
 };
 
@@ -255,7 +254,6 @@ pub struct BenchCli {
     /// Noise threshold for comparison (percentage, e.g., 1.0 means 1%)
     ///
     /// Changes within this threshold are considered noise and reported as "unchanged".
-    /// For success ratio, this is interpreted as percentage points.
     #[clap(long, default_value = "1.0", value_parser = parse_noise_threshold)]
     pub noise_threshold: f64,
 
@@ -372,17 +370,6 @@ where
     // Compute comparison using pre-loaded baseline
     let cmp = baseline.map(|b| baseline::compare(&report, &b, cli.noise_threshold, &cli.regression_metrics));
 
-    // Warn about skipped metrics
-    #[cfg(feature = "tracing")]
-    if let Some(ref c) = cmp
-        && !c.skipped_metrics.is_empty()
-    {
-        log::warn!(
-            "Some regression metrics were unavailable and skipped: {}",
-            c.skipped_metrics.iter().join(", ")
-        );
-    }
-
     // Print report with comparison
     let mut output: Box<dyn std::io::Write> = match cli.output_file {
         Some(ref path) => Box::new(File::create(path)?),
@@ -397,8 +384,8 @@ where
     // Save baseline if requested (after comparison, so we can compare-then-save)
     if let Some(ref name) = cli.save_baseline {
         baseline::save(&baseline_dir, name, &report, &cli)?;
-        #[cfg(feature = "tracing")]
-        log::info!(
+        println!();
+        println!(
             "Baseline '{}' saved to {}",
             name,
             baseline_dir.join(format!("{}.json", name)).display()

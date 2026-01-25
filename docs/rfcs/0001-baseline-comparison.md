@@ -153,8 +153,7 @@ Based on regression metrics only (default or user-specified via `--regression-me
 
 #### Delta Calculation
 
-- **Throughput/Latency**: Percentage change `(current - baseline) / baseline * 100`
-- **Success ratio**: Percentage points `(current - baseline) * 100`
+- **All metrics**: Percentage change `(current - baseline) / baseline * 100`
 - **Noise threshold**: Changes within threshold are reported as "unchanged"
 
 ### 5. Report Output
@@ -169,33 +168,30 @@ Baseline Comparison
 
   Throughput
         Metric      Current      Baseline      Change
-    * Iters/s      1234.56/s    1100.00/s     1.12x better
+    * Iters/s      1234.56/s    1100.00/s     +12.23% better
 
   Latency
         Metric      Current      Baseline      Change
-    *    Avg        1.82ms       1.99ms        1.09x better
-         Med        1.71ms       1.82ms        1.06x better
-    *    p90        2.98ms       3.12ms        1.05x better
-    *    p99        5.89ms       6.23ms        1.06x better
-         Max       82.34ms      89.23ms        1.08x better
+    *    Avg        1.82ms       1.99ms        -8.54% better
+         Med        1.71ms       1.82ms        -6.04% better
+    *    p90        2.98ms       3.12ms        -4.49% better
+    *    p99        5.89ms       6.23ms        -5.46% better
+         Max       82.34ms      89.23ms        -7.72% better
 
   Reliability
         Metric      Current      Baseline      Change
-    * Success       99.50%       99.00%        +0.50pp
+    * Success       99.50%       99.00%        +0.51% better
 
   * Metrics selected for verdict calculation
 ```
 
 The `*` prefix marks metrics that are included in `--regression-metrics` and used for verdict calculation.
 
-| Metric Type | Change | Display | Color |
-|-------------|--------|---------|-------|
-| Throughput/Latency | Improved | `1.23x better` | Green |
-| Throughput/Latency | Regressed | `1.23x worse` | Red |
-| Throughput/Latency | Within noise | `no change` | Dim |
-| Success Ratio | Improved | `+0.50pp` | Green |
-| Success Ratio | Regressed | `-0.50pp` | Red |
-| Success Ratio | Within noise | `no change` | Dim |
+| Change | Display | Color |
+|--------|---------|-------|
+| Improved | `+12.34% better` | Green |
+| Regressed | `-12.34% worse ` | Red |
+| Within noise | `no change` | Dim |
 
 #### JSON Format
 

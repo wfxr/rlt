@@ -49,16 +49,6 @@ impl RegressionMetric {
     }
 }
 
-/// Delta value representation - either percentage change or percentage points.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum DeltaValue {
-    /// Percentage change: (current - baseline) / baseline * 100.
-    Percent(f64),
-    /// Percentage points (absolute difference * 100, for ratios like success_ratio).
-    Points(f64),
-}
-
 /// Status of a metric comparison.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -82,10 +72,10 @@ pub struct Delta {
     /// None if baseline is 0 and current is non-zero (infinite ratio).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ratio: Option<f64>,
-    /// The delta value (either percent or points).
+    /// The delta percentage: (current - baseline) / baseline * 100.
     /// None if baseline is 0 (cannot compute percentage).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub delta: Option<DeltaValue>,
+    pub delta: Option<f64>,
     /// Comparison status.
     pub status: DeltaStatus,
 }
@@ -260,26 +250,10 @@ fn calculate_latency_delta(current: f64, baseline: f64, noise_threshold: f64) ->
     calculate_delta(current, baseline, noise_threshold, false)
 }
 
-/// Calculate delta for success ratio (higher is better, uses percentage points).
+/// Calculate delta for success ratio (higher is better).
 fn calculate_success_ratio_delta(current: f64, baseline: f64, noise_threshold: f64) -> Delta {
-    let ratio = match (baseline == 0.0, current == 0.0) {
-        (true, true) => Some(1.0),
-        (true, false) => None, // Infinite ratio
-        _ => Some(current / baseline),
-    };
-
-    // Success ratio uses percentage points (absolute difference * 100)
-    let delta_points = (current - baseline) * 100.0;
-    let delta = Some(DeltaValue::Points(delta_points));
-
-    // For success ratio, changes within noise_threshold percentage points are unchanged
-    let status = match delta_points {
-        d if d.abs() <= noise_threshold => DeltaStatus::Unchanged,
-        d if d > 0.0 => DeltaStatus::Improved, // Higher success ratio is better
-        _ => DeltaStatus::Regressed,
-    };
-
-    Delta { current, baseline, ratio, delta, status }
+    // Success ratio uses the same relative change calculation as throughput
+    calculate_delta(current, baseline, noise_threshold, true)
 }
 
 /// Generic delta calculation.
@@ -292,7 +266,7 @@ fn calculate_delta(current: f64, baseline: f64, noise_threshold: f64, higher_is_
             current,
             baseline,
             ratio: Some(1.0),
-            delta: Some(DeltaValue::Percent(0.0)),
+            delta: Some(0.0),
             status: DeltaStatus::Unchanged,
         };
     }
@@ -303,7 +277,7 @@ fn calculate_delta(current: f64, baseline: f64, noise_threshold: f64, higher_is_
     } else {
         let r = current / baseline;
         let d = (current - baseline) / baseline * 100.0;
-        (Some(r), Some(DeltaValue::Percent(d)))
+        (Some(r), Some(d))
     };
 
     // Determine status based on ratio and noise threshold
@@ -425,7 +399,7 @@ mod tests {
                 current: 1100.0,
                 baseline: 1000.0,
                 ratio: Some(1.1),
-                delta: Some(DeltaValue::Percent(10.0)),
+                delta: Some(10.0),
                 status: DeltaStatus::Improved,
             },
             items_rate: None,
@@ -435,7 +409,7 @@ mod tests {
             current: 1.0,
             baseline: 1.0,
             ratio: Some(1.0),
-            delta: Some(DeltaValue::Points(0.0)),
+            delta: Some(0.0),
             status: DeltaStatus::Unchanged,
         };
 
@@ -451,7 +425,7 @@ mod tests {
                 current: 1100.0,
                 baseline: 1000.0,
                 ratio: Some(1.1),
-                delta: Some(DeltaValue::Percent(10.0)),
+                delta: Some(10.0),
                 status: DeltaStatus::Improved,
             },
             items_rate: None,
@@ -461,7 +435,7 @@ mod tests {
             current: 0.95,
             baseline: 0.99,
             ratio: Some(0.9596),
-            delta: Some(DeltaValue::Points(-4.0)),
+            delta: Some(-4.04), // (0.95 - 0.99) / 0.99 * 100
             status: DeltaStatus::Regressed,
         };
 

@@ -9,7 +9,7 @@ use tabled::{
     settings::{Alignment, Color, Margin, Style, themes::Colorization},
 };
 
-use crate::baseline::{Comparison, Delta, DeltaStatus, DeltaValue, LatencyDeltas, RegressionMetric, Verdict};
+use crate::baseline::{Comparison, Delta, DeltaStatus, LatencyDeltas, RegressionMetric, Verdict};
 use crate::duration::TimeUnit;
 use crate::{
     duration::{DurationExt, FormattedDuration},
@@ -23,19 +23,7 @@ use crate::{
 pub struct TextReporter;
 
 impl super::BenchReporter for TextReporter {
-    fn print(&self, w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
-        self.print(w, report, None)
-    }
-}
-
-impl TextReporter {
-    /// Print report with optional baseline comparison.
-    pub fn print(
-        &self,
-        w: &mut dyn Write,
-        report: &BenchReport,
-        comparison: Option<&Comparison>,
-    ) -> anyhow::Result<()> {
+    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> anyhow::Result<()> {
         print_summary(w, report)?;
 
         if report.stats.counter.iters > 0 {
@@ -309,25 +297,16 @@ fn format_latency(secs: f64, u: TimeUnit) -> String {
 }
 
 fn format_delta_change(delta: &Delta) -> String {
-    // For percentage points (success ratio), show +/-X.XXpp format
-    match &delta.delta {
-        Some(DeltaValue::Points(points)) => match delta.status {
-            DeltaStatus::Unchanged => "no change".dim().to_string(),
-            DeltaStatus::Improved => format!("{:+.2}pp", points).green().to_string(),
-            DeltaStatus::Regressed => format!("{:+.2}pp", points).red().to_string(),
-        },
-        _ => match delta.status {
-            // For percentage (throughput/latency), show factor format
-            DeltaStatus::Unchanged => "no change".dim().to_string(),
-            DeltaStatus::Improved => {
-                let factor = format_factor(delta);
-                format!("{} better", factor).green().to_string()
-            }
-            DeltaStatus::Regressed => {
-                let factor = format_factor(delta);
-                format!("{} worse", factor).red().to_string()
-            }
-        },
+    match delta.status {
+        DeltaStatus::Unchanged => "no change".dim().to_string(),
+        DeltaStatus::Improved => {
+            let pct = delta.delta.unwrap_or(0.0);
+            format!("{:+.2}% better", pct).green().to_string()
+        }
+        DeltaStatus::Regressed => {
+            let pct = delta.delta.unwrap_or(0.0);
+            format!("{:+.2}% worse ", pct).red().to_string()
+        }
     }
 }
 
@@ -340,17 +319,6 @@ fn format_metric_name(
     let is_used = regression_metrics.contains(&metric) && !skipped_metrics.contains(&metric);
     let prefix = if is_used { "* " } else { "  " };
     format!("{}{}", prefix, metric.display_name())
-}
-
-fn format_factor(delta: &Delta) -> String {
-    match delta.ratio {
-        Some(r) if r > 0.0 => {
-            // Always show factor >= 1.0
-            let factor = if r >= 1.0 { r } else { 1.0 / r };
-            format!("{:.2}x", factor)
-        }
-        _ => "N/A".to_string(),
-    }
 }
 
 fn print_baseline_comparison(w: &mut dyn Write, cmp: &Comparison, u: TimeUnit) -> anyhow::Result<()> {

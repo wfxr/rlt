@@ -7,7 +7,7 @@ mod compare;
 mod storage;
 
 pub use compare::{
-    Comparison, Delta, DeltaStatus, DeltaValue, LatencyDeltas, RegressionMetric, ThroughputDeltas, Verdict, compare,
+    Comparison, Delta, DeltaStatus, LatencyDeltas, RegressionMetric, ThroughputDeltas, Verdict, compare,
 };
 pub use storage::{load, load_file, resolve_baseline_dir, save};
 

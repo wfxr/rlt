@@ -9,19 +9,7 @@ use std::{collections::BTreeMap, io::Write};
 pub struct JsonReporter;
 
 impl BenchReporter for JsonReporter {
-    fn print(&self, w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
-        self.print(w, report, None)
-    }
-}
-
-impl JsonReporter {
-    /// Print report with optional baseline comparison.
-    pub fn print(
-        &self,
-        w: &mut dyn Write,
-        report: &BenchReport,
-        comparison: Option<&Comparison>,
-    ) -> anyhow::Result<()> {
+    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> anyhow::Result<()> {
         let elapsed = report.elapsed.as_secs_f64();
         let counter = &report.stats.counter;
         let summary = Summary {
@@ -113,7 +101,7 @@ struct ItersSummary {
 struct ItemsSummary {
     total: u64,
     rate: f64,
-    #[serde(skip_serializing_if = "not_normal_f64")]
+    #[serde(skip_serializing_if = "is_not_finite_f64")]
     items_per_iter: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     bytes_per_item: Option<u64>,
@@ -152,6 +140,6 @@ struct Report {
     comparison: Option<Comparison>,
 }
 
-fn not_normal_f64(v: &f64) -> bool {
-    !v.is_normal()
+fn is_not_finite_f64(v: &f64) -> bool {
+    !v.is_finite()
 }
