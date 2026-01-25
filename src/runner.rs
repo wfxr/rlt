@@ -305,3 +305,166 @@ async fn join_all(set: &mut JoinSet<Result<()>>) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+    use std::time::Instant;
+
+    use crate::{Status, clock::Clock, report::IterReport};
+
+    /// Execution phase for barrier synchronization testing
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Phase {
+        Setup,
+        Warmup,
+        Bench,
+    }
+
+    /// A BenchSuite that records phase transitions with timestamps
+    #[derive(Clone)]
+    struct TrackedSuite {
+        events: Arc<Mutex<Vec<(Phase, Instant)>>>,
+        setup_delay_ms: u64,
+        clock: Clock,
+    }
+
+    impl TrackedSuite {
+        fn new(setup_delay_ms: u64, clock: Clock) -> Self {
+            Self {
+                events: Arc::new(Mutex::new(Vec::new())),
+                setup_delay_ms,
+                clock,
+            }
+        }
+
+        fn record(&self, phase: Phase) {
+            self.events.lock().unwrap().push((phase, Instant::now()));
+        }
+
+        fn count(&self, phase: Phase) -> usize {
+            self.events.lock().unwrap().iter().filter(|(p, _)| *p == phase).count()
+        }
+
+        /// Verify all events of `first` phase complete before any `second` phase event starts
+        fn verify_order(&self, first: Phase, second: Phase) -> bool {
+            let events = self.events.lock().unwrap();
+            let max_first = events.iter().filter(|(p, _)| *p == first).map(|(_, t)| t).max();
+            let min_second = events.iter().filter(|(p, _)| *p == second).map(|(_, t)| t).min();
+            match (max_first, min_second) {
+                (Some(a), Some(b)) => a <= b,
+                _ => true,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl BenchSuite for TrackedSuite {
+        type WorkerState = ();
+
+        async fn state(&self, _: u32) -> Result<()> {
+            Ok(())
+        }
+
+        async fn setup(&mut self, _: &mut (), worker_id: u32) -> Result<()> {
+            if worker_id == 0 {
+                tokio::time::sleep(Duration::from_millis(self.setup_delay_ms)).await;
+            }
+            self.record(Phase::Setup);
+            Ok(())
+        }
+
+        async fn bench(&mut self, _: &mut (), _: &IterInfo) -> Result<IterReport> {
+            let phase = if self.clock.elapsed() == Duration::ZERO {
+                Phase::Warmup
+            } else {
+                Phase::Bench
+            };
+            self.record(phase);
+            Ok(IterReport {
+                duration: Duration::from_micros(100),
+                status: Status::success(200),
+                bytes: 0,
+                items: 0,
+            })
+        }
+    }
+
+    async fn run_benchmark(suite: &TrackedSuite, concurrency: u32, warmups: u64, iterations: u64) -> Result<()> {
+        let (res_tx, mut res_rx) = mpsc::unbounded_channel();
+        let (_pause_tx, pause_rx) = watch::channel(false);
+        let cancel = CancellationToken::new();
+
+        let opts = BenchOpts {
+            clock: suite.clock.clone(),
+            concurrency,
+            iterations: Some(iterations),
+            duration: None,
+            warmups,
+            #[cfg(feature = "rate_limit")]
+            rate: None,
+        };
+
+        let runner = Runner::new(suite.clone(), opts, res_tx, pause_rx, cancel);
+        let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
+
+        runner.run().await?;
+        drop(drain);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_setup_barrier_sync() {
+        let suite = TrackedSuite::new(50, Clock::new_paused());
+        run_benchmark(&suite, 4, 8, 4).await.unwrap();
+
+        assert_eq!(suite.count(Phase::Setup), 4);
+        assert_eq!(suite.count(Phase::Warmup), 8);
+        assert!(
+            suite.verify_order(Phase::Setup, Phase::Warmup),
+            "setup should complete before warmup"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_warmup_barrier_sync() {
+        let suite = TrackedSuite::new(10, Clock::new_paused());
+        run_benchmark(&suite, 4, 8, 8).await.unwrap();
+
+        assert_eq!(suite.count(Phase::Warmup), 8);
+        assert_eq!(suite.count(Phase::Bench), 8);
+        assert!(
+            suite.verify_order(Phase::Warmup, Phase::Bench),
+            "warmup should complete before bench"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clock_starts_after_warmup() {
+        let clock = Clock::new_paused();
+        let suite = TrackedSuite::new(10, clock.clone());
+
+        assert_eq!(clock.elapsed(), Duration::ZERO);
+        run_benchmark(&suite, 2, 4, 4).await.unwrap();
+
+        // Distinct warmup/bench events prove clock was paused during warmup
+        assert_eq!(suite.count(Phase::Warmup), 4);
+        assert_eq!(suite.count(Phase::Bench), 4);
+        assert!(clock.elapsed() > Duration::ZERO);
+    }
+
+    #[tokio::test]
+    async fn test_no_warmup_still_syncs() {
+        let suite = TrackedSuite::new(30, Clock::new_paused());
+        run_benchmark(&suite, 3, 0, 6).await.unwrap();
+
+        assert_eq!(suite.count(Phase::Setup), 3);
+        assert_eq!(suite.count(Phase::Warmup), 0);
+        assert_eq!(suite.count(Phase::Bench), 6);
+        assert!(
+            suite.verify_order(Phase::Setup, Phase::Bench),
+            "setup should complete before bench"
+        );
+    }
+}
