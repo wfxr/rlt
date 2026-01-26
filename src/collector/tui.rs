@@ -253,11 +253,7 @@ impl TuiCollector {
 
                 let mid = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Percentage(50),
-                        Constraint::Percentage(50),
-                        Constraint::Percentage(50),
-                    ])
+                    .constraints([Constraint::Fill(1), Constraint::Fill(1), Constraint::Fill(1)])
                     .split(rows[0]);
 
                 let bot = Layout::default()
