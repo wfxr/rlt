@@ -344,12 +344,15 @@ where
     // Save baseline if requested (after comparison, so we can compare-then-save)
     if let Some(ref name) = cli.save_baseline {
         baseline::save(&baseline_dir, name, &report, &cli)?;
-        println!();
-        println!(
-            "Baseline '{}' saved to {}",
-            name,
-            baseline_dir.join(format!("{}.json", name)).display()
-        );
+        // Only print save message in Text mode to keep JSON output clean
+        if matches!(cli.output, ReportFormat::Text) {
+            eprintln!();
+            eprintln!(
+                "Baseline '{}' saved to {}",
+                name,
+                baseline_dir.join(format!("{}.json", name)).display()
+            );
+        }
     }
 
     // Handle regression for CI
