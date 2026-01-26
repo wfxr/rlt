@@ -9,6 +9,7 @@ categories = [
     "development-tools::profiling",
 ]
 edition = "2024"
+rust-version = "1.85"
 keywords = ["performance", "load-testing", "benchmark", "cli"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"

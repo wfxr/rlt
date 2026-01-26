@@ -136,13 +136,13 @@ impl RotateWindowGroup {
     pub fn rotate(&mut self) {
         self.counter += 1;
         self.stats_by_sec.rotate(IterStats::new());
-        if self.counter.is_multiple_of(10) {
+        if self.counter % 10 == 0 {
             self.stats_by_10sec.rotate(IterStats::new());
         }
-        if self.counter.is_multiple_of(60) {
+        if self.counter % 60 == 0 {
             self.stats_by_min.rotate(IterStats::new());
         }
-        if self.counter.is_multiple_of(600) {
+        if self.counter % 600 == 0 {
             self.stats_by_10min.rotate(IterStats::new());
         }
     }
