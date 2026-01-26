@@ -146,9 +146,9 @@ impl Terminal {
 
 impl Drop for Terminal {
     fn drop(&mut self) {
-        std::io::stdout().execute(terminal::LeaveAlternateScreen).unwrap();
-        std::io::stdout().execute(cursor::Show).unwrap();
-        crossterm::terminal::disable_raw_mode().unwrap();
+        let _ = std::io::stdout().execute(terminal::LeaveAlternateScreen);
+        let _ = std::io::stdout().execute(cursor::Show);
+        let _ = crossterm::terminal::disable_raw_mode();
     }
 }
 
