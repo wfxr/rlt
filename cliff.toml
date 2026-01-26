@@ -70,6 +70,7 @@ split_commits = false
 # regex for preprocessing the commit messages
 commit_preprocessors = [
     { pattern = '\(#(\d+)\)', replace = "[#${1}](<REPO>/issues/${1})" },
+    { pattern = "^Init commit", replace = "chore(init): init commit" },
 ]
 # regex for parsing and grouping commits
 commit_parsers = [
@@ -81,6 +82,7 @@ commit_parsers = [
     { message = "^refactor", group = "<!-- 2 -->🚜 Refactor" },
     { message = "^style", group = "<!-- 5 -->🎨 Styling" },
     { message = "^test", group = "<!-- 6 -->🧪 Testing" },
+    { message = "^chore\\(init\\)", skip = true },
     { message = "^chore: [rR]elease", skip = true },
     { message = "^chore\\(release\\): prepare for", skip = true },
     { message = "^chore\\(deps.*\\)", skip = true },
