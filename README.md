@@ -5,8 +5,6 @@ A **R**ust **L**oad **T**esting framework with real-time TUI support.
 [![Crates.io](https://img.shields.io/crates/v/rlt.svg)](https://crates.io/crates/rlt)
 [![Documentation](https://docs.rs/rlt/badge.svg)](https://docs.rs/rlt/)
 [![CI](https://github.com/wfxr/rlt/actions/workflows/check.yml/badge.svg)](https://github.com/wfxr/rlt/actions/workflows/check.yml)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85+-blue.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
-[![Dependency status](https://deps.rs/repo/github/wfxr/rlt/status.svg)](https://deps.rs/repo/github/wfxr/rlt)
 [![License](https://img.shields.io/crates/l/rlt.svg)](https://github.com/wfxr/rlt?tab=MIT-1-ov-file)
 
 ![Screenshot](https://raw.githubusercontent.com/wfxr/i/master/rlt-demo.gif)
