@@ -1,5 +1,23 @@
 
-## [0.4.0](https://github.com/wfxr/rlt/compare/v0.3.0..0.4.0) (2026-01-25)
+## [0.4.1](https://github.com/wfxr/rlt/compare/v0.4.0..0.4.1) (2026-01-26)
+
+### 🐛 Bug Fixes
+
+- Sync workers after setup before warmup starts ( @wfxr)
+
+### 📚 Documentation
+
+- Simplify badges in README ( @wfxr)
+
+### 🧪 Testing
+
+- Add integration tests for Runner barrier sync ( @wfxr)
+
+### ⚙️ Miscellaneous Tasks
+
+- Skip init commit in changelog
+
+## [0.4.0](https://github.com/wfxr/rlt/compare/v0.3.0..v0.4.0) (2026-01-25)
 
 ### 🚀 Features
 
