@@ -71,3 +71,15 @@ hyper-util = { version = "0.1", features = [
 reqwest = "0.13"
 tokio-postgres = "0.7"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[example]]
+name = "logging"
+required-features = ["tracing"]
+
+[[example]]
+name = "http_hyper"
+required-features = ["http"]
+
+[[example]]
+name = "http_reqwest"
+required-features = ["http"]
