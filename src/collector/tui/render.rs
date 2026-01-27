@@ -74,18 +74,18 @@ pub(super) fn render_dashboard(
 }
 
 fn render_stats_timewin(frame: &mut Frame, area: Rect, stats: &RotateDiffWindowGroup, tw: TimeWindow) {
-    let (stats, duration) = match tw {
-        TimeWindow::Second => stats.stats_last_sec(),
-        TimeWindow::TenSec => stats.stats_last_10sec(),
-        TimeWindow::Minute => stats.stats_last_min(),
-        TimeWindow::TenMin => stats.stats_last_10min(),
+    let (counter, duration) = match tw {
+        TimeWindow::Second => stats.counter_last_sec(),
+        TimeWindow::TenSec => stats.counter_last_10sec(),
+        TimeWindow::Minute => stats.counter_last_min(),
+        TimeWindow::TenMin => stats.counter_last_10min(),
     };
 
     render_stats(
         frame,
         area,
         Line::from(vec!["Stats for ".into(), format!("last {}", tw).yellow().bold()]),
-        &stats.counter,
+        &counter,
         duration,
     );
 }
@@ -232,12 +232,12 @@ fn render_error_dist(frame: &mut Frame, area: Rect, error_dist: &HashMap<String,
 
 fn render_iter_hist(frame: &mut Frame, area: Rect, rwg: &RotateWindowGroup, tw: TimeWindow) {
     let win = match tw {
-        TimeWindow::Second => &rwg.stats_by_sec,
-        TimeWindow::TenSec => &rwg.stats_by_10sec,
-        TimeWindow::Minute => &rwg.stats_by_min,
-        TimeWindow::TenMin => &rwg.stats_by_10min,
+        TimeWindow::Second => &rwg.counters_by_sec,
+        TimeWindow::TenSec => &rwg.counters_by_10sec,
+        TimeWindow::Minute => &rwg.counters_by_min,
+        TimeWindow::TenMin => &rwg.counters_by_10min,
     };
-    let cols = win.iter().map(|w| w.counter.iters.to_string().len()).max().unwrap_or(0);
+    let cols = win.iter().map(|w| w.iters.to_string().len()).max().unwrap_or(0);
     let data = win
         .iter()
         .enumerate()
@@ -248,7 +248,7 @@ fn render_iter_hist(frame: &mut Frame, area: Rect, rwg: &RotateWindowGroup, tw: 
                     s.push(' ');
                 }
             }
-            (s, n.counter.iters)
+            (s, n.iters)
         })
         .collect_vec();
 

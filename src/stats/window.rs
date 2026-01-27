@@ -21,7 +21,7 @@ use tokio::time::Duration;
 
 use crate::report::IterReport;
 
-use super::IterStats;
+use super::Counter;
 
 /// A rolling window that maintains statistics in time-ordered buckets.
 ///
@@ -32,23 +32,23 @@ use super::IterStats;
 /// This enables efficient calculation of statistics over the recent past
 /// without storing individual data points.
 pub struct RotateWindow {
-    buckets: VecDeque<IterStats>,
+    buckets: VecDeque<Counter>,
     size: NonZeroUsize,
 }
 
 impl RotateWindow {
     fn new(size: NonZeroUsize) -> Self {
         let mut win = Self { buckets: VecDeque::with_capacity(size.get()), size };
-        win.rotate(IterStats::new());
+        win.rotate(Counter::default());
         win
     }
 
     fn push(&mut self, item: &IterReport) {
         // SAFETY: `buckets` is never empty
-        *self.buckets.front_mut().unwrap() += item;
+        self.buckets.front_mut().unwrap().append(item);
     }
 
-    fn rotate(&mut self, bucket: IterStats) {
+    fn rotate(&mut self, bucket: Counter) {
         if self.buckets.len() == self.size.get() {
             self.buckets.pop_back();
         }
@@ -59,17 +59,17 @@ impl RotateWindow {
         self.buckets.len()
     }
 
-    fn front(&self) -> &IterStats {
+    fn front(&self) -> &Counter {
         // SAFETY: `buckets` is never empty
         self.buckets.front().unwrap()
     }
 
-    fn back(&self) -> &IterStats {
+    fn back(&self) -> &Counter {
         // SAFETY: `buckets` is never empty
         self.buckets.back().unwrap()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &IterStats> {
+    pub fn iter(&self) -> impl Iterator<Item = &Counter> {
         self.buckets.iter()
     }
 }
@@ -77,10 +77,10 @@ impl RotateWindow {
 /// A group of rolling windows at multiple time scales.
 ///
 /// This structure maintains four rolling windows that rotate at different intervals:
-/// - `stats_by_sec` - Rotates every second
-/// - `stats_by_10sec` - Rotates every 10 seconds
-/// - `stats_by_min` - Rotates every minute
-/// - `stats_by_10min` - Rotates every 10 minutes
+/// - `counters_by_sec` - Rotates every second
+/// - `counters_by_10sec` - Rotates every 10 seconds
+/// - `counters_by_min` - Rotates every minute
+/// - `counters_by_10min` - Rotates every 10 minutes
 ///
 /// All windows receive the same data via [`push()`](Self::push), but their buckets
 /// represent different time granularities. Call [`rotate()`](Self::rotate) once per
@@ -89,13 +89,13 @@ pub struct RotateWindowGroup {
     /// Rotation counter (incremented each second).
     pub counter: u64,
     /// Rolling window with 1-second buckets.
-    pub stats_by_sec: RotateWindow,
+    pub counters_by_sec: RotateWindow,
     /// Rolling window with 10-second buckets.
-    pub stats_by_10sec: RotateWindow,
+    pub counters_by_10sec: RotateWindow,
     /// Rolling window with 1-minute buckets.
-    pub stats_by_min: RotateWindow,
+    pub counters_by_min: RotateWindow,
     /// Rolling window with 10-minute buckets.
-    pub stats_by_10min: RotateWindow,
+    pub counters_by_10min: RotateWindow,
 }
 
 impl RotateWindowGroup {
@@ -107,10 +107,10 @@ impl RotateWindowGroup {
     pub fn new(buckets: NonZeroUsize) -> Self {
         Self {
             counter: 0,
-            stats_by_sec: RotateWindow::new(buckets),
-            stats_by_10sec: RotateWindow::new(buckets),
-            stats_by_min: RotateWindow::new(buckets),
-            stats_by_10min: RotateWindow::new(buckets),
+            counters_by_sec: RotateWindow::new(buckets),
+            counters_by_10sec: RotateWindow::new(buckets),
+            counters_by_min: RotateWindow::new(buckets),
+            counters_by_10min: RotateWindow::new(buckets),
         }
     }
 
@@ -119,31 +119,31 @@ impl RotateWindowGroup {
     /// The report's statistics are accumulated into the current (front) bucket
     /// of each window.
     pub fn push(&mut self, stats: &IterReport) {
-        self.stats_by_sec.push(stats);
-        self.stats_by_10sec.push(stats);
-        self.stats_by_min.push(stats);
-        self.stats_by_10min.push(stats);
+        self.counters_by_sec.push(stats);
+        self.counters_by_10sec.push(stats);
+        self.counters_by_min.push(stats);
+        self.counters_by_10min.push(stats);
     }
 
     /// Rotates the windows forward by one second.
     ///
     /// This should be called once per second. It creates a new bucket in each
     /// window according to its time scale:
-    /// - `stats_by_sec` rotates every call
-    /// - `stats_by_10sec` rotates every 10 calls
-    /// - `stats_by_min` rotates every 60 calls
-    /// - `stats_by_10min` rotates every 600 calls
+    /// - `counters_by_sec` rotates every call
+    /// - `counters_by_10sec` rotates every 10 calls
+    /// - `counters_by_min` rotates every 60 calls
+    /// - `counters_by_10min` rotates every 600 calls
     pub fn rotate(&mut self) {
         self.counter += 1;
-        self.stats_by_sec.rotate(IterStats::new());
+        self.counters_by_sec.rotate(Counter::default());
         if self.counter % 10 == 0 {
-            self.stats_by_10sec.rotate(IterStats::new());
+            self.counters_by_10sec.rotate(Counter::default());
         }
         if self.counter % 60 == 0 {
-            self.stats_by_min.rotate(IterStats::new());
+            self.counters_by_min.rotate(Counter::default());
         }
         if self.counter % 600 == 0 {
-            self.stats_by_10min.rotate(IterStats::new());
+            self.counters_by_10min.rotate(Counter::default());
         }
     }
 }
@@ -158,6 +158,9 @@ impl RotateWindowGroup {
 /// of cumulative statistics. Rate calculations compare the newest and oldest
 /// snapshots to compute activity over the window's time span.
 ///
+/// Note: This stores only [`Counter`] snapshots (not `IterStats`) to keep the per-frame
+/// rotation in the TUI hot path allocation-free.
+///
 /// # Time Windows
 ///
 /// - Last 1 second
@@ -166,20 +169,20 @@ impl RotateWindowGroup {
 /// - Last 10 minutes
 pub struct RotateDiffWindowGroup {
     interval: Duration,
-    stats_last_sec: RotateWindow,
-    stats_last_10sec: RotateWindow,
-    stats_last_min: RotateWindow,
-    stats_last_10min: RotateWindow,
+    counters_last_sec: RotateWindow,
+    counters_last_10sec: RotateWindow,
+    counters_last_min: RotateWindow,
+    counters_last_10min: RotateWindow,
 }
 
 impl RotateDiffWindowGroup {
     /// Returns mutable references to all internal windows.
-    fn all_stats(&mut self) -> [&mut RotateWindow; 4] {
+    fn all_windows(&mut self) -> [&mut RotateWindow; 4] {
         [
-            &mut self.stats_last_sec,
-            &mut self.stats_last_10sec,
-            &mut self.stats_last_min,
-            &mut self.stats_last_10min,
+            &mut self.counters_last_sec,
+            &mut self.counters_last_10sec,
+            &mut self.counters_last_min,
+            &mut self.counters_last_10min,
         ]
     }
 
@@ -195,12 +198,12 @@ impl RotateDiffWindowGroup {
         let interval = Duration::from_secs_f64(1.0 / fps.get() as f64);
         let mut group = Self {
             interval,
-            stats_last_sec: RotateWindow::new(fps.saturating_add(1)),
-            stats_last_10sec: RotateWindow::new(fps.saturating_mul(nonzero!(10usize)).saturating_add(1)),
-            stats_last_min: RotateWindow::new(fps.saturating_mul(nonzero!(60usize)).saturating_add(1)),
-            stats_last_10min: RotateWindow::new(fps.saturating_mul(nonzero!(600usize)).saturating_add(1)),
+            counters_last_sec: RotateWindow::new(fps.saturating_add(1)),
+            counters_last_10sec: RotateWindow::new(fps.saturating_mul(nonzero!(10usize)).saturating_add(1)),
+            counters_last_min: RotateWindow::new(fps.saturating_mul(nonzero!(60usize)).saturating_add(1)),
+            counters_last_10min: RotateWindow::new(fps.saturating_mul(nonzero!(600usize)).saturating_add(1)),
         };
-        group.rotate(&IterStats::new());
+        group.rotate(Counter::default());
         group
     }
 
@@ -210,35 +213,36 @@ impl RotateDiffWindowGroup {
     ///
     /// # Arguments
     ///
-    /// * `stats` - The current cumulative statistics snapshot.
-    pub fn rotate(&mut self, stats: &IterStats) {
-        for s in self.all_stats().iter_mut() {
-            s.rotate(stats.clone());
+    /// * `counter` - The current cumulative statistics snapshot.
+    pub fn rotate(&mut self, counter: Counter) {
+        // Hot path (called at FPS): rotate cheap `Counter` snapshots to avoid per-frame allocations.
+        for s in self.all_windows().iter_mut() {
+            s.rotate(counter);
         }
     }
 
     /// Returns statistics delta and duration for the last 1 second.
-    pub fn stats_last_sec(&self) -> (IterStats, Duration) {
-        self.diff(&self.stats_last_sec)
+    pub fn counter_last_sec(&self) -> (Counter, Duration) {
+        self.diff(&self.counters_last_sec)
     }
 
     /// Returns statistics delta and duration for the last 10 seconds.
-    pub fn stats_last_10sec(&self) -> (IterStats, Duration) {
-        self.diff(&self.stats_last_10sec)
+    pub fn counter_last_10sec(&self) -> (Counter, Duration) {
+        self.diff(&self.counters_last_10sec)
     }
 
     /// Returns statistics delta and duration for the last 1 minute.
-    pub fn stats_last_min(&self) -> (IterStats, Duration) {
-        self.diff(&self.stats_last_min)
+    pub fn counter_last_min(&self) -> (Counter, Duration) {
+        self.diff(&self.counters_last_min)
     }
 
     /// Returns statistics delta and duration for the last 10 minutes.
-    pub fn stats_last_10min(&self) -> (IterStats, Duration) {
-        self.diff(&self.stats_last_10min)
+    pub fn counter_last_10min(&self) -> (Counter, Duration) {
+        self.diff(&self.counters_last_10min)
     }
 
     /// Calculates the difference between the newest and oldest snapshots.
-    fn diff(&self, win: &RotateWindow) -> (IterStats, Duration) {
+    fn diff(&self, win: &RotateWindow) -> (Counter, Duration) {
         let duration = (win.len() - 1) as u32 * self.interval;
         (win.front() - win.back(), duration)
     }

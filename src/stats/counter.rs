@@ -17,14 +17,14 @@ use crate::report::IterReport;
 ///
 /// # Operations
 ///
-/// - Can be accumulated from [`IterReport`] using `+=` operator.
+/// - Can be accumulated from [`IterReport`] using [`append`](Self::append).
 /// - Supports subtraction via `-=` for calculating deltas.
 ///
 /// # Example
 ///
 /// ```ignore
 /// let mut counter = Counter::default();
-/// counter += &iter_report;  // Accumulate from an iteration report
+/// counter.append(&iter_report);  // Accumulate from an iteration report
 /// println!("Total iterations: {}", counter.iters);
 /// ```
 #[derive(Default, Clone, Copy, Debug)]
@@ -39,8 +39,9 @@ pub struct Counter {
     pub duration: Duration,
 }
 
-impl std::ops::AddAssign<&IterReport> for Counter {
-    fn add_assign(&mut self, stats: &IterReport) {
+impl Counter {
+    /// Accumulate metrics from a single iteration report.
+    pub fn append(&mut self, stats: &IterReport) {
         self.iters += 1;
         self.items += stats.items;
         self.bytes += stats.bytes;
@@ -54,5 +55,15 @@ impl std::ops::SubAssign<&Counter> for Counter {
         self.items -= rhs.items;
         self.bytes -= rhs.bytes;
         self.duration -= rhs.duration;
+    }
+}
+
+impl std::ops::Sub<&Counter> for &Counter {
+    type Output = Counter;
+
+    fn sub(self, rhs: &Counter) -> Counter {
+        let mut out = *self;
+        out -= rhs;
+        out
     }
 }
