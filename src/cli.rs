@@ -285,8 +285,8 @@ pub enum ReportFormat {
 /// Run the benchmark with the given CLI options and benchmark suite.
 pub async fn run<BS>(cli: BenchCli, bench_suite: BS) -> anyhow::Result<()>
 where
-    BS: BenchSuite + Send + Sync + 'static,
-    BS::WorkerState: Send + Sync + 'static,
+    BS: BenchSuite + Send + 'static,
+    BS::WorkerState: Send + 'static,
 {
     // Resolve baseline directory
     let baseline_dir = baseline::resolve_baseline_dir(cli.baseline_dir.as_deref());

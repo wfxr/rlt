@@ -136,8 +136,8 @@ impl IterInfo {
 
 impl<BS> Runner<BS>
 where
-    BS: BenchSuite + Send + Sync + 'static,
-    BS::WorkerState: Send + Sync + 'static,
+    BS: BenchSuite + Send + 'static,
+    BS::WorkerState: Send + 'static,
 {
     /// Create a new benchmark runner with the given benchmark suite and options.
     pub fn new(
