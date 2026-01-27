@@ -157,7 +157,7 @@ impl TuiCollector {
                         biased;
                         _ = ui_ticker.tick() => break,
                         _ = latest_stats_ticker.tick() => {
-                            latest_stats.rotate(stats);
+                            latest_stats.rotate(stats.counter);
                             continue;
                         }
                         _ = latest_iters_ticker.tick() => {
@@ -169,7 +169,7 @@ impl TuiCollector {
                                 *status_dist.entry(report.status).or_default() += 1;
                                 hist.record(report.duration)?;
                                 latest_iters.push(&report);
-                                *stats += &report;
+                                stats.append(&report);
                             }
                             Some(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
                             None => {
