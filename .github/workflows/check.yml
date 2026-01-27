@@ -21,6 +21,18 @@ concurrency:
   cancel-in-progress: true
 name: check
 jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    name: commitlint / conventional commits
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Lint commit messages
+        uses: wagoid/commitlint-github-action@v6
   fmt:
     runs-on: ubuntu-latest
     name: stable / fmt
