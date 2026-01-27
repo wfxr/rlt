@@ -16,8 +16,8 @@
 //!
 //! # Keyboard Controls
 //!
-//! - `+`/`-`: Zoom time window in/out
-//! - `a`: Auto-select time window based on elapsed time
+//! - `+`/`-`: Zoom time window in/out (switch to manual mode)
+//! - `a`: Auto time window (default)
 //! - `p`: Pause/resume the benchmark
 //! - `l`: Toggle log viewer (requires `tracing` feature)
 //! - `q` or `Ctrl+C`: Quit the benchmark
@@ -39,7 +39,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use state::{TimeWindow, TuiCollectorState};
+use state::{TimeWindowMode, TuiCollectorState};
 use terminal::Terminal;
 
 use crate::{
@@ -99,7 +99,7 @@ impl TuiCollector {
         auto_quit: bool,
     ) -> Result<Self> {
         let state = TuiCollectorState {
-            tm_win: TimeWindow::Second,
+            tm_win: TimeWindowMode::Auto,
             finished: false,
             #[cfg(feature = "tracing")]
             log: tui_log::LogState::from_env()?,
@@ -189,6 +189,7 @@ impl TuiCollector {
 
             terminal.draw(|f| {
                 let paused = *self.pause.borrow();
+                let tw = self.state.tm_win.effective(elapsed);
                 render::render_dashboard(
                     f,
                     &stats.counter,
@@ -197,7 +198,7 @@ impl TuiCollector {
                     paused,
                     self.state.finished,
                     &latest_stats,
-                    self.state.tm_win,
+                    tw,
                     status_dist,
                     error_dist,
                     &latest_iters,
