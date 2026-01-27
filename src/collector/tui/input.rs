@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
-use super::state::TimeWindow;
+use super::state::TimeWindowMode;
 
 impl super::TuiCollector {
     /// Handle the user input events. Returns `true` if the collector should quit.
@@ -13,16 +13,15 @@ impl super::TuiCollector {
             if let Event::Key(KeyEvent { code, modifiers, .. }) = crossterm::event::read()? {
                 match (code, modifiers) {
                     (Char('+'), _) => {
-                        self.state.tm_win = self.state.tm_win.prev();
+                        let tw = self.state.tm_win.effective(elapsed);
+                        self.state.tm_win = TimeWindowMode::Manual(tw.prev());
                     }
                     (Char('-'), _) => {
-                        self.state.tm_win = self.state.tm_win.next();
+                        let tw = self.state.tm_win.effective(elapsed);
+                        self.state.tm_win = TimeWindowMode::Manual(tw.next());
                     }
                     (Char('a'), _) => {
-                        self.state.tm_win = *TimeWindow::variants()
-                            .iter()
-                            .rfind(|&&ts| elapsed > Duration::from(ts))
-                            .unwrap_or(&TimeWindow::Second)
+                        self.state.tm_win = TimeWindowMode::Auto;
                     }
                     (Char('q'), _) | (Char('c'), KeyModifiers::CONTROL) => {
                         self.cancel.cancel();
