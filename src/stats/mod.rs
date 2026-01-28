@@ -6,16 +6,16 @@
 //!
 //! # Key Types
 //!
-//! - [`Counter`] - Tracks basic metrics: iterations, items, bytes, and duration.
+//! - [`Counter`] - Tracks basic metrics: iterations, items, bytes, and latency sum.
 //! - [`IterStats`] - Aggregates iteration statistics with per-status breakdowns.
-//! - [`RotateWindowGroup`] - Manages multiple rolling windows at configurable time scales.
-//! - [`RotateDiffWindow`] - Provides rate calculations over sliding windows.
+//! - [`MultiScaleStatsWindow`] - Manages multiple rolling windows at configurable time scales.
+//! - [`RecentStatsWindow`] - Provides rate calculations over sliding windows.
 
 mod counter;
 mod window;
 
 pub use counter::Counter;
-pub use window::{RotateDiffWindow, RotateWindowGroup};
+pub use window::{MultiScaleStatsWindow, RecentStatsWindow};
 
 use std::collections::HashMap;
 
@@ -29,26 +29,26 @@ use crate::{report::IterReport, status::Status};
 ///
 /// # Fields
 ///
-/// - `counter` - Cumulative totals across all iterations.
-/// - `details` - Per-status breakdown of counters (e.g., separate counts for
+/// - `overall` - Cumulative totals across all iterations.
+/// - `by_status` - Per-status breakdown of counters (e.g., separate counts for
 ///   successful vs failed iterations).
 #[derive(Clone, Debug)]
 pub struct IterStats {
     /// Cumulative totals across all iterations.
-    pub counter: Counter,
+    pub overall: Counter,
     /// Per-status breakdown of counters.
-    pub details: HashMap<Status, Counter>,
+    pub by_status: HashMap<Status, Counter>,
 }
 
 impl IterStats {
     pub fn new() -> Self {
-        Self { counter: Counter::default(), details: HashMap::new() }
+        Self { overall: Counter::default(), by_status: HashMap::new() }
     }
 
-    pub fn append(&mut self, stats: &IterReport) {
-        self.counter.append(stats);
-        let counter = self.details.entry(stats.status).or_default();
-        counter.append(stats);
+    pub fn record(&mut self, report: &IterReport) {
+        self.overall.record(report);
+        let counter = self.by_status.entry(report.status).or_default();
+        counter.record(report);
     }
 }
 

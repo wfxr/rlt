@@ -60,7 +60,7 @@ impl super::BenchReporter for TextReporter {
     fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> anyhow::Result<()> {
         print_summary(w, report)?;
 
-        if report.stats.counter.iters > 0 {
+        if report.stats.overall.iters > 0 {
             writeln!(w)?;
             print_latency(w, &report.hist)?;
 
@@ -146,7 +146,7 @@ fn render_bar(count: u64, max_count: u64) -> String {
 #[rustfmt::skip]
 fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
     let elapsed = report.elapsed.as_secs_f64();
-    let counter = &report.stats.counter;
+    let overall = &report.stats.overall;
 
     writeln!(w, "{}", "Summary".h1())?;
     writeln!(w, "  Benchmark took {} with concurrency {} ({} success)",
@@ -159,18 +159,18 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> 
         vec!["".into(), "Total".into(), "Rate".into()],
         vec![
             "Iters".into(),
-            format!("{}", counter.iters),
-            format!("{:.2}/s", rate(counter.iters, elapsed)),
+            format!("{}", overall.iters),
+            format!("{:.2}/s", rate(overall.iters, elapsed)),
         ],
         vec![
             "Items".into(),
-            format!("{}", counter.items),
-            format!("{:.2}/s", rate(counter.items, elapsed)),
+            format!("{}", overall.items),
+            format!("{:.2}/s", rate(overall.items, elapsed)),
         ],
         vec![
             "Bytes".into(),
-            format!("{:.2}", counter.bytes.adjusted()),
-            format!("{:.2}/s", rate(counter.bytes, elapsed).adjusted()?),
+            format!("{:.2}", overall.bytes.adjusted()),
+            format!("{:.2}/s", rate(overall.bytes, elapsed).adjusted()?),
         ],
     ];
     let mut stats = Builder::from(stats).build();

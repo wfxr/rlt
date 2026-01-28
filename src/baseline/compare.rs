@@ -160,28 +160,28 @@ pub fn compare(
     regression_metrics: &[RegressionMetric],
 ) -> Comparison {
     let elapsed = report.elapsed.as_secs_f64();
-    let counter = &report.stats.counter;
+    let overall = &report.stats.overall;
     let baseline_summary = &baseline.report.summary;
 
     // Calculate throughput deltas
     let throughput = ThroughputDeltas {
         iters_rate: calculate_throughput_delta(
-            rate(counter.iters, elapsed),
+            rate(overall.iters, elapsed),
             baseline_summary.iters.rate,
             noise_threshold,
         ),
-        items_rate: if counter.items > 0 || baseline_summary.items.total > 0 {
+        items_rate: if overall.items > 0 || baseline_summary.items.total > 0 {
             Some(calculate_throughput_delta(
-                rate(counter.items, elapsed),
+                rate(overall.items, elapsed),
                 baseline_summary.items.rate,
                 noise_threshold,
             ))
         } else {
             None
         },
-        bytes_rate: if counter.bytes > 0 || baseline_summary.bytes.total > 0 {
+        bytes_rate: if overall.bytes > 0 || baseline_summary.bytes.total > 0 {
             Some(calculate_throughput_delta(
-                rate(counter.bytes, elapsed),
+                rate(overall.bytes, elapsed),
                 baseline_summary.bytes.rate,
                 noise_threshold,
             ))

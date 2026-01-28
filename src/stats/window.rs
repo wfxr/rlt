@@ -10,9 +10,9 @@
 //!
 //! # Key Types
 //!
-//! - [`RotateWindow`] - A single rolling window with configurable bucket count.
-//! - [`RotateWindowGroup`] - Multiple windows at different time scales.
-//! - [`RotateDiffWindow`] - Calculates rate statistics over sliding windows.
+//! - [`StatsWindow`] - A single rolling window with configurable bucket count.
+//! - [`MultiScaleStatsWindow`] - Multiple windows at different time scales.
+//! - [`RecentStatsWindow`] - Calculates rate statistics over sliding windows.
 
 use std::{collections::VecDeque, num::NonZeroUsize};
 
@@ -33,12 +33,12 @@ use super::Counter;
 ///
 /// This enables efficient calculation of statistics over the recent past
 /// without storing individual data points.
-pub struct RotateWindow {
+pub struct StatsWindow {
     buckets: VecDeque<Counter>,
     size: NonZeroUsize,
 }
 
-impl RotateWindow {
+impl StatsWindow {
     fn new(size: NonZeroUsize) -> Self {
         let mut win = Self { buckets: VecDeque::with_capacity(size.get()), size };
         win.rotate(Counter::default());
@@ -47,7 +47,7 @@ impl RotateWindow {
 
     fn push(&mut self, item: &IterReport) {
         // SAFETY: `buckets` is never empty
-        self.buckets.front_mut().unwrap().append(item);
+        self.buckets.front_mut().unwrap().record(item);
     }
 
     fn rotate(&mut self, bucket: Counter) {
@@ -80,23 +80,23 @@ impl RotateWindow {
     }
 }
 
-/// A group of rolling windows at multiple time scales.
+/// A multi-scale stats window backed by multiple rolling windows.
 ///
 /// This structure maintains multiple rolling windows that rotate at different
 /// intervals configured by the caller.
 ///
 /// All windows receive the same data via [`push()`](Self::push), but their buckets
-/// represent different time granularities. Call [`rotate()`](Self::rotate) once per
+/// represent different time granularities. Call [`tick()`](Self::tick) once per
 /// second to advance the windows.
-pub struct RotateWindowGroup {
-    /// Rotation counter (incremented each second).
-    pub counter: u64,
+pub struct MultiScaleStatsWindow {
+    /// Seconds tick counter (incremented once per second).
+    pub tick: u64,
     periods: Vec<usize>,
-    windows: Vec<RotateWindow>,
+    windows: Vec<StatsWindow>,
 }
 
-impl RotateWindowGroup {
-    /// Creates a new window group with the specified number of buckets per window.
+impl MultiScaleStatsWindow {
+    /// Creates a new multi-scale stats window with the specified number of buckets per window.
     ///
     /// # Arguments
     ///
@@ -114,8 +114,8 @@ impl RotateWindowGroup {
         let periods = periods.into_iter().map(Into::into).collect_vec();
         ensure!(!periods.is_empty(), "periods must be non-empty");
         ensure!(periods.iter().all(|p| *p > 0), "periods must be > 0");
-        let windows = periods.iter().map(|_| RotateWindow::new(buckets)).collect();
-        Ok(Self { counter: 0, periods, windows })
+        let windows = periods.iter().map(|_| StatsWindow::new(buckets)).collect();
+        Ok(Self { tick: 0, periods, windows })
     }
 
     /// Adds an iteration report to all windows.
@@ -128,21 +128,21 @@ impl RotateWindowGroup {
         }
     }
 
-    /// Rotates the windows forward by one second.
+    /// Advances the windows forward by one second.
     ///
-    /// This should be called once per second. It creates a new bucket in each
-    /// window according to its configured period.
-    pub fn rotate(&mut self) {
-        self.counter += 1;
+    /// Call this once per second. It creates a new bucket in each window according to its
+    /// configured period.
+    pub fn tick(&mut self) {
+        self.tick += 1;
         for (period, win) in self.periods.iter().zip(self.windows.iter_mut()) {
-            if self.counter % (*period as u64) == 0 {
+            if self.tick % (*period as u64) == 0 {
                 win.rotate(Counter::default());
             }
         }
     }
 
     /// Returns the window matching the requested period in seconds.
-    pub fn window_for_secs(&self, secs: usize) -> Option<&RotateWindow> {
+    pub fn window_for_secs(&self, secs: usize) -> Option<&StatsWindow> {
         self.periods
             .iter()
             .position(|p| *p == secs)
@@ -152,7 +152,7 @@ impl RotateWindowGroup {
 
 /// A sliding window for calculating rate statistics over arbitrary time spans.
 ///
-/// Unlike [`RotateWindowGroup`] which stores raw statistics in separate windows,
+/// Unlike [`MultiScaleStatsWindow`] which stores raw statistics in separate windows,
 /// this structure stores cumulative snapshots in a single window and calculates
 /// differences to determine rates over any requested time period.
 ///
@@ -166,21 +166,21 @@ impl RotateWindowGroup {
 /// # Example
 ///
 /// ```ignore
-/// let mut win = RotateDiffWindow::new(nonzero!(10usize)); // 10 fps
-/// win.rotate(counter);
-/// let (delta, duration) = win.counter_for_secs(1);  // last 1 second
-/// let (delta, duration) = win.counter_for_secs(60); // last 1 minute
+/// let mut win = RecentStatsWindow::new(nonzero!(10usize)); // 10 fps
+/// win.record(counter);
+/// let (delta, duration) = win.stats_for_secs(1);  // last 1 second
+/// let (delta, duration) = win.stats_for_secs(60); // last 1 minute
 /// ```
-pub struct RotateDiffWindow {
+pub struct RecentStatsWindow {
     interval: Duration,
     fps: usize,
-    window: RotateWindow,
+    window: StatsWindow,
 }
 
-impl RotateDiffWindow {
-    /// Creates a new diff window with the specified frame rate.
+impl RecentStatsWindow {
+    /// Creates a new recent stats window with the specified frame rate.
     ///
-    /// The frame rate determines how often [`rotate()`](Self::rotate) should be called.
+    /// The frame rate determines how often [`record()`](Self::record) should be called.
     /// Higher frame rates provide smoother statistics but use more memory.
     ///
     /// # Arguments
@@ -191,21 +191,21 @@ impl RotateDiffWindow {
         let mut win = Self {
             interval,
             fps: fps.get(),
-            window: RotateWindow::new(fps.saturating_mul(nonzero!(600usize)).saturating_add(1)),
+            window: StatsWindow::new(fps.saturating_mul(nonzero!(600usize)).saturating_add(1)),
         };
-        win.rotate(Counter::default());
+        win.record(Counter::default());
         win
     }
 
-    /// Rotates the window with a new cumulative statistics snapshot.
+    /// Records a new cumulative statistics snapshot.
     ///
     /// This should be called at the configured frame rate (fps times per second).
     ///
     /// # Arguments
     ///
-    /// * `counter` - The current cumulative statistics snapshot.
-    pub fn rotate(&mut self, counter: Counter) {
-        self.window.rotate(counter);
+    /// * `total` - The current cumulative statistics snapshot.
+    pub fn record(&mut self, total: Counter) {
+        self.window.rotate(total);
     }
 
     /// Returns statistics delta and duration for the specified time window.
@@ -216,7 +216,7 @@ impl RotateDiffWindow {
     /// # Arguments
     ///
     /// * `secs` - The time window in seconds (e.g., 1, 10, 60, 600).
-    pub fn counter_for_secs(&self, secs: usize) -> (Counter, Duration) {
+    pub fn stats_for_secs(&self, secs: usize) -> (Counter, Duration) {
         let frames_back = self.fps * secs;
         let clamped = frames_back.min(self.window.len().saturating_sub(1));
         let duration = clamped as u32 * self.interval;
@@ -234,56 +234,56 @@ mod tests {
             iters,
             items: iters * 10,
             bytes: iters * 100,
-            duration: Duration::from_millis(iters),
+            latency_sum: Duration::from_millis(iters),
         }
     }
 
     #[test]
-    fn rotate_diff_window_one_sec() {
+    fn recent_stats_window_one_sec() {
         let fps = nonzero!(10usize); // 10 frames per second
-        let mut win = RotateDiffWindow::new(fps);
+        let mut win = RecentStatsWindow::new(fps);
 
         // Simulate 1 second of data (10 frames at 10 fps)
         for i in 1..=10 {
-            win.rotate(make_counter(i * 100));
+            win.record(make_counter(i * 100));
         }
 
-        let (counter, duration) = win.counter_for_secs(1);
+        let (counter, duration) = win.stats_for_secs(1);
         // Diff between frame 10 (iters=1000) and frame 0 (iters=0)
         assert_eq!(counter.iters, 1000);
         assert_eq!(duration, Duration::from_secs(1));
     }
 
     #[test]
-    fn rotate_diff_window_partial_fill() {
+    fn recent_stats_window_partial_fill() {
         let fps = nonzero!(10usize);
-        let mut win = RotateDiffWindow::new(fps);
+        let mut win = RecentStatsWindow::new(fps);
 
         // Only 5 frames (0.5 second worth)
         for i in 1..=5 {
-            win.rotate(make_counter(i * 10));
+            win.record(make_counter(i * 10));
         }
 
-        let (counter, duration) = win.counter_for_secs(1);
+        let (counter, duration) = win.stats_for_secs(1);
         // Window not full yet, should use available data
-        // Note: new() initializes with 2 default counters (one in RotateWindow::new, one in win.rotate)
+        // Note: new() initializes with 2 default counters (one in StatsWindow::new, one via `record`)
         // So after 5 rotations we have 7 elements total, giving (7-1) * 100ms = 600ms
         assert_eq!(counter.iters, 50); // 50 - 0
         assert_eq!(duration, Duration::from_millis(600)); // 6 intervals * 100ms
     }
 
     #[test]
-    fn rotate_diff_window_multiple_spans() {
+    fn recent_stats_window_multiple_spans() {
         let fps = nonzero!(10usize);
-        let mut win = RotateDiffWindow::new(fps);
+        let mut win = RecentStatsWindow::new(fps);
 
         // Fill enough for 10 seconds (100 frames)
         for i in 1..=100 {
-            win.rotate(make_counter(i));
+            win.record(make_counter(i));
         }
 
-        let (c1, d1) = win.counter_for_secs(1);
-        let (c10, d10) = win.counter_for_secs(10);
+        let (c1, d1) = win.stats_for_secs(1);
+        let (c10, d10) = win.stats_for_secs(10);
 
         // 1 sec = 10 frames: diff between frame 100 and frame 90
         assert_eq!(c1.iters, 100 - 90);
@@ -295,31 +295,31 @@ mod tests {
     }
 
     #[test]
-    fn rotate_window_group_rotates_by_periods() {
-        let mut group = RotateWindowGroup::new(nonzero!(2usize), [1usize, 10]).expect("valid periods");
-        assert_eq!(group.window_for_secs(10).unwrap().len(), 1);
+    fn multi_scale_stats_window_ticks_by_periods() {
+        let mut msw = MultiScaleStatsWindow::new(nonzero!(2usize), [1usize, 10]).expect("valid periods");
+        assert_eq!(msw.window_for_secs(10).unwrap().len(), 1);
 
         for _ in 0..9 {
-            group.rotate();
+            msw.tick();
         }
-        assert_eq!(group.window_for_secs(10).unwrap().len(), 1);
+        assert_eq!(msw.window_for_secs(10).unwrap().len(), 1);
 
-        group.rotate();
-        assert_eq!(group.window_for_secs(10).unwrap().len(), 2);
-        assert_eq!(group.window_for_secs(1).unwrap().len(), 2);
+        msw.tick();
+        assert_eq!(msw.window_for_secs(10).unwrap().len(), 2);
+        assert_eq!(msw.window_for_secs(1).unwrap().len(), 2);
     }
 
     #[test]
-    fn rotate_window_group_rejects_zero_period() {
-        let err = RotateWindowGroup::new(nonzero!(2usize), [0usize])
+    fn multi_scale_stats_window_rejects_zero_period() {
+        let err = MultiScaleStatsWindow::new(nonzero!(2usize), [0usize])
             .err()
             .expect("expected error");
         assert_eq!(err.to_string(), "periods must be > 0");
     }
 
     #[test]
-    fn rotate_window_group_rejects_empty_periods() {
-        let err = RotateWindowGroup::new(nonzero!(2usize), std::iter::empty::<usize>())
+    fn multi_scale_stats_window_rejects_empty_periods() {
+        let err = MultiScaleStatsWindow::new(nonzero!(2usize), std::iter::empty::<usize>())
             .err()
             .expect("expected error");
         assert_eq!(err.to_string(), "periods must be non-empty");

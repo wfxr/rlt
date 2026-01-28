@@ -41,15 +41,15 @@ pub struct BenchReport {
 impl BenchReport {
     /// Returns the success ratio of the benchmark.
     pub fn success_ratio(&self) -> f64 {
-        if self.stats.counter.iters == 0 {
+        if self.stats.overall.iters == 0 {
             return 0.0;
         }
         self.stats
-            .details
+            .by_status
             .iter()
             .filter(|(k, _)| k.kind() == StatusKind::Success)
             .map(|(_, v)| v.iters as f64)
             .sum::<f64>()
-            / self.stats.counter.iters as f64
+            / self.stats.overall.iters as f64
     }
 }
