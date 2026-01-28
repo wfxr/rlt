@@ -51,6 +51,12 @@ impl From<TimeWindow> for Duration {
     }
 }
 
+impl From<TimeWindow> for usize {
+    fn from(tw: TimeWindow) -> Self {
+        tw as usize
+    }
+}
+
 impl TimeWindow {
     fn auto_select(elapsed: Duration) -> Self {
         *Self::variants()

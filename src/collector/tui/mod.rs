@@ -39,7 +39,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use state::{TimeWindowMode, TuiCollectorState};
+use state::{TimeWindow, TimeWindowMode, TuiCollectorState};
 use terminal::Terminal;
 
 use crate::{
@@ -136,7 +136,7 @@ impl TuiCollector {
         let clock = self.bench_opts.clock.clone();
         let mut terminal = Terminal::new()?;
 
-        let mut latest_iters = RotateWindowGroup::new(nonzero!(60usize));
+        let mut latest_iters = RotateWindowGroup::new(nonzero!(60usize), TimeWindow::variants().iter().copied())?;
         let mut latest_iters_ticker = clock.ticker(SECOND);
 
         let mut latest_stats = RotateDiffWindow::new(self.fps.into());

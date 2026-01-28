@@ -8,7 +8,7 @@
 //!
 //! - [`Counter`] - Tracks basic metrics: iterations, items, bytes, and duration.
 //! - [`IterStats`] - Aggregates iteration statistics with per-status breakdowns.
-//! - [`RotateWindowGroup`] - Manages multiple rolling windows at different time scales.
+//! - [`RotateWindowGroup`] - Manages multiple rolling windows at configurable time scales.
 //! - [`RotateDiffWindow`] - Provides rate calculations over sliding windows.
 
 mod counter;

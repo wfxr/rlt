@@ -11,11 +11,13 @@
 //! # Key Types
 //!
 //! - [`RotateWindow`] - A single rolling window with configurable bucket count.
-//! - [`RotateWindowGroup`] - Multiple windows at different time scales (1s, 10s, 1min, 10min).
+//! - [`RotateWindowGroup`] - Multiple windows at different time scales.
 //! - [`RotateDiffWindow`] - Calculates rate statistics over sliding windows.
 
 use std::{collections::VecDeque, num::NonZeroUsize};
 
+use anyhow::{Result, ensure};
+use itertools::Itertools;
 use nonzero_ext::nonzero;
 use tokio::time::Duration;
 
@@ -80,11 +82,8 @@ impl RotateWindow {
 
 /// A group of rolling windows at multiple time scales.
 ///
-/// This structure maintains four rolling windows that rotate at different intervals:
-/// - `counters_by_sec` - Rotates every second
-/// - `counters_by_10sec` - Rotates every 10 seconds
-/// - `counters_by_min` - Rotates every minute
-/// - `counters_by_10min` - Rotates every 10 minutes
+/// This structure maintains multiple rolling windows that rotate at different
+/// intervals configured by the caller.
 ///
 /// All windows receive the same data via [`push()`](Self::push), but their buckets
 /// represent different time granularities. Call [`rotate()`](Self::rotate) once per
@@ -92,14 +91,8 @@ impl RotateWindow {
 pub struct RotateWindowGroup {
     /// Rotation counter (incremented each second).
     pub counter: u64,
-    /// Rolling window with 1-second buckets.
-    pub counters_by_sec: RotateWindow,
-    /// Rolling window with 10-second buckets.
-    pub counters_by_10sec: RotateWindow,
-    /// Rolling window with 1-minute buckets.
-    pub counters_by_min: RotateWindow,
-    /// Rolling window with 10-minute buckets.
-    pub counters_by_10min: RotateWindow,
+    periods: Vec<usize>,
+    windows: Vec<RotateWindow>,
 }
 
 impl RotateWindowGroup {
@@ -108,14 +101,21 @@ impl RotateWindowGroup {
     /// # Arguments
     ///
     /// * `buckets` - The number of buckets each window should maintain.
-    pub fn new(buckets: NonZeroUsize) -> Self {
-        Self {
-            counter: 0,
-            counters_by_sec: RotateWindow::new(buckets),
-            counters_by_10sec: RotateWindow::new(buckets),
-            counters_by_min: RotateWindow::new(buckets),
-            counters_by_10min: RotateWindow::new(buckets),
-        }
+    /// * `periods` - Rotation periods in seconds for each window.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `periods` is empty or contains zero.
+    pub fn new<I, P>(buckets: NonZeroUsize, periods: I) -> Result<Self>
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<usize>,
+    {
+        let periods = periods.into_iter().map(Into::into).collect_vec();
+        ensure!(!periods.is_empty(), "periods must be non-empty");
+        ensure!(periods.iter().all(|p| *p > 0), "periods must be > 0");
+        let windows = periods.iter().map(|_| RotateWindow::new(buckets)).collect();
+        Ok(Self { counter: 0, periods, windows })
     }
 
     /// Adds an iteration report to all windows.
@@ -123,32 +123,30 @@ impl RotateWindowGroup {
     /// The report's statistics are accumulated into the current (front) bucket
     /// of each window.
     pub fn push(&mut self, stats: &IterReport) {
-        self.counters_by_sec.push(stats);
-        self.counters_by_10sec.push(stats);
-        self.counters_by_min.push(stats);
-        self.counters_by_10min.push(stats);
+        for win in &mut self.windows {
+            win.push(stats);
+        }
     }
 
     /// Rotates the windows forward by one second.
     ///
     /// This should be called once per second. It creates a new bucket in each
-    /// window according to its time scale:
-    /// - `counters_by_sec` rotates every call
-    /// - `counters_by_10sec` rotates every 10 calls
-    /// - `counters_by_min` rotates every 60 calls
-    /// - `counters_by_10min` rotates every 600 calls
+    /// window according to its configured period.
     pub fn rotate(&mut self) {
         self.counter += 1;
-        self.counters_by_sec.rotate(Counter::default());
-        if self.counter % 10 == 0 {
-            self.counters_by_10sec.rotate(Counter::default());
+        for (period, win) in self.periods.iter().zip(self.windows.iter_mut()) {
+            if self.counter % (*period as u64) == 0 {
+                win.rotate(Counter::default());
+            }
         }
-        if self.counter % 60 == 0 {
-            self.counters_by_min.rotate(Counter::default());
-        }
-        if self.counter % 600 == 0 {
-            self.counters_by_10min.rotate(Counter::default());
-        }
+    }
+
+    /// Returns the window matching the requested period in seconds.
+    pub fn window_for_secs(&self, secs: usize) -> Option<&RotateWindow> {
+        self.periods
+            .iter()
+            .position(|p| *p == secs)
+            .map(|idx| &self.windows[idx])
     }
 }
 
@@ -292,7 +290,38 @@ mod tests {
         assert_eq!(d1, Duration::from_secs(1));
 
         // 10 sec = 100 frames: diff between frame 100 and frame 0
-        assert_eq!(c10.iters, 100 - 0);
+        assert_eq!(c10.iters, 100);
         assert_eq!(d10, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn rotate_window_group_rotates_by_periods() {
+        let mut group = RotateWindowGroup::new(nonzero!(2usize), [1usize, 10]).expect("valid periods");
+        assert_eq!(group.window_for_secs(10).unwrap().len(), 1);
+
+        for _ in 0..9 {
+            group.rotate();
+        }
+        assert_eq!(group.window_for_secs(10).unwrap().len(), 1);
+
+        group.rotate();
+        assert_eq!(group.window_for_secs(10).unwrap().len(), 2);
+        assert_eq!(group.window_for_secs(1).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn rotate_window_group_rejects_zero_period() {
+        let err = RotateWindowGroup::new(nonzero!(2usize), [0usize])
+            .err()
+            .expect("expected error");
+        assert_eq!(err.to_string(), "periods must be > 0");
+    }
+
+    #[test]
+    fn rotate_window_group_rejects_empty_periods() {
+        let err = RotateWindowGroup::new(nonzero!(2usize), std::iter::empty::<usize>())
+            .err()
+            .expect("expected error");
+        assert_eq!(err.to_string(), "periods must be non-empty");
     }
 }
