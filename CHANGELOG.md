@@ -1,5 +1,35 @@
 
-## [0.4.1](https://github.com/wfxr/rlt/compare/v0.4.0..0.4.1) (2026-01-26)
+## [0.5.0](https://github.com/wfxr/rlt/compare/v0.4.1..0.5.0) (2026-01-28)
+
+### 🚀 Features
+
+- *(tui)* Default to auto time window [#87](https://github.com/wfxr/rlt/issues/87) ( @wfxr)
+
+### 🐛 Bug Fixes
+
+- Use Fill constraints for TUI three-column layout [#85](https://github.com/wfxr/rlt/issues/85) ( @wfxr)
+- Make TUI terminal cleanup resilient to avoid panics in Drop [#84](https://github.com/wfxr/rlt/issues/84) ( @wfxr)
+- Print baseline save message to stderr only in text mode [#83](https://github.com/wfxr/rlt/issues/83) ( @wfxr)
+- Correct CI MSRV configuration for edition 2024 [#82](https://github.com/wfxr/rlt/issues/82) ( @wfxr)
+
+### 🚜 Refactor
+
+- *(api)* Relax Sync bounds on BenchSuite and WorkerState [#89](https://github.com/wfxr/rlt/issues/89) ( @wfxr)
+- *(stats)* Configurable RotateWindowGroup periods [#92](https://github.com/wfxr/rlt/issues/92) ( @wfxr)
+- *(stats)* Simplify RotateDiffWindow from 4 windows to 1 ( @wfxr)
+- *(tui)* Split collector into submodules [#86](https://github.com/wfxr/rlt/issues/86) ( @wfxr)
+
+### ⚡ Performance
+
+- *(stats)* Avoid per-frame HashMap cloning in windows [#88](https://github.com/wfxr/rlt/issues/88) ( @wfxr)
+
+### ⚙️ Miscellaneous Tasks
+
+- Add .worktrees to gitignore ( @wfxr)
+- Align rustfmt edition with crate edition (2024) ( @wfxr)
+- Add GitHub issue and PR templates [#80](https://github.com/wfxr/rlt/issues/80) ( @wfxr)
+
+## [0.4.1](https://github.com/wfxr/rlt/compare/v0.4.0..v0.4.1) (2026-01-26)
 
 ### 🐛 Bug Fixes
 
@@ -15,7 +45,7 @@
 
 ### ⚙️ Miscellaneous Tasks
 
-- Skip init commit in changelog
+- Skip init commit in changelog ( @wfxr)
 
 ## [0.4.0](https://github.com/wfxr/rlt/compare/v0.3.0..v0.4.0) (2026-01-25)
 
