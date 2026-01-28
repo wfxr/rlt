@@ -226,12 +226,9 @@ fn render_error_dist(frame: &mut Frame, area: Rect, error_dist: &HashMap<String,
 }
 
 fn render_iter_hist(frame: &mut Frame, area: Rect, rwg: &RotateWindowGroup, tw: TimeWindow) {
-    let win = match tw {
-        TimeWindow::Second => &rwg.counters_by_sec,
-        TimeWindow::TenSec => &rwg.counters_by_10sec,
-        TimeWindow::Minute => &rwg.counters_by_min,
-        TimeWindow::TenMin => &rwg.counters_by_10min,
-    };
+    let win = rwg
+        .window_for_secs(tw as usize)
+        .expect("RotateWindowGroup missing TimeWindow period");
     let cols = win.iter().map(|w| w.iters.to_string().len()).max().unwrap_or(0);
     let data = win
         .iter()
