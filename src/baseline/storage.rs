@@ -96,16 +96,16 @@ pub fn save(baseline_dir: &Path, name: &BaselineName, report: &BenchReport, cli:
 /// Create a Baseline from a BenchReport and CLI options.
 fn create_baseline(name: &str, report: &BenchReport, cli: &BenchCli) -> Baseline {
     let elapsed = report.elapsed.as_secs_f64();
-    let counter = &report.stats.counter;
+    let overall = &report.stats.overall;
 
     // Build summary
     let summary = Summary {
         success_ratio: report.success_ratio(),
         total_time: elapsed,
         concurrency: report.concurrency,
-        iters: RateSummary { total: counter.iters, rate: rate(counter.iters, elapsed) },
-        items: RateSummary { total: counter.items, rate: rate(counter.items, elapsed) },
-        bytes: RateSummary { total: counter.bytes, rate: rate(counter.bytes, elapsed) },
+        iters: RateSummary { total: overall.iters, rate: rate(overall.iters, elapsed) },
+        items: RateSummary { total: overall.items, rate: rate(overall.items, elapsed) },
+        bytes: RateSummary { total: overall.bytes, rate: rate(overall.bytes, elapsed) },
     };
 
     // Build latency (if available)

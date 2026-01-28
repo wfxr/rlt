@@ -12,7 +12,7 @@ use crate::{
     duration::DurationExt,
     histogram::{LatencyHistogram, PERCENTAGES},
     runner::BenchOpts,
-    stats::{Counter, RotateDiffWindow, RotateWindowGroup},
+    stats::{Counter, MultiScaleStatsWindow, RecentStatsWindow},
     status::{Status, StatusKind},
     util::{IntoAdjustedByte, TryIntoAdjustedByte},
 };
@@ -27,11 +27,11 @@ pub(super) fn render_dashboard(
     opts: &BenchOpts,
     paused: bool,
     finished: bool,
-    latest_stats: &RotateDiffWindow,
+    recent_stats: &RecentStatsWindow,
     tw: TimeWindow,
     status_dist: &HashMap<Status, u64>,
     error_dist: &HashMap<String, u64>,
-    latest_iters: &RotateWindowGroup,
+    latest_iters: &MultiScaleStatsWindow,
     hist: &LatencyHistogram,
 ) {
     let progress_height = 3;
@@ -65,7 +65,7 @@ pub(super) fn render_dashboard(
 
     render_process_gauge(frame, rows[3], counter, elapsed, opts, paused, finished);
     render_stats_overall(frame, mid[1], counter, elapsed);
-    render_stats_timewin(frame, mid[0], latest_stats, tw);
+    render_stats_timewin(frame, mid[0], recent_stats, tw);
     render_status_dist(frame, mid[2], status_dist);
     render_error_dist(frame, rows[1], error_dist);
     render_iter_hist(frame, bot[0], latest_iters, tw);
@@ -73,8 +73,8 @@ pub(super) fn render_dashboard(
     render_tips(frame, rows[4]);
 }
 
-fn render_stats_timewin(frame: &mut Frame, area: Rect, stats: &RotateDiffWindow, tw: TimeWindow) {
-    let (counter, duration) = stats.counter_for_secs(tw as usize);
+fn render_stats_timewin(frame: &mut Frame, area: Rect, stats: &RecentStatsWindow, tw: TimeWindow) {
+    let (counter, duration) = stats.stats_for_secs(tw as usize);
 
     render_stats(
         frame,
@@ -225,10 +225,10 @@ fn render_error_dist(frame: &mut Frame, area: Rect, error_dist: &HashMap<String,
     frame.render_widget(p, area);
 }
 
-fn render_iter_hist(frame: &mut Frame, area: Rect, rwg: &RotateWindowGroup, tw: TimeWindow) {
-    let win = rwg
+fn render_iter_hist(frame: &mut Frame, area: Rect, win: &MultiScaleStatsWindow, tw: TimeWindow) {
+    let win = win
         .window_for_secs(tw as usize)
-        .expect("RotateWindowGroup missing TimeWindow period");
+        .expect("MultiScaleStatsWindow missing TimeWindow period");
     let cols = win.iter().map(|w| w.iters.to_string().len()).max().unwrap_or(0);
     let data = win
         .iter()

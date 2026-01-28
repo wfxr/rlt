@@ -46,30 +46,30 @@ pub struct JsonReporter;
 impl BenchReporter for JsonReporter {
     fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> anyhow::Result<()> {
         let elapsed = report.elapsed.as_secs_f64();
-        let counter = &report.stats.counter;
+        let overall = &report.stats.overall;
         let summary = Summary {
             success_ratio: report.success_ratio(),
             total_time: elapsed,
             concurrency: report.concurrency,
 
             iters: ItersSummary {
-                total: counter.iters,
-                rate: rate(counter.iters, elapsed),
-                bytes_per_iter: counter.bytes.checked_div(counter.iters),
+                total: overall.iters,
+                rate: rate(overall.iters, elapsed),
+                bytes_per_iter: overall.bytes.checked_div(overall.iters),
             },
 
             items: ItemsSummary {
-                total: counter.items,
-                rate: rate(counter.items, elapsed),
-                items_per_iter: if counter.iters > 0 {
-                    counter.items as f64 / counter.iters as f64
+                total: overall.items,
+                rate: rate(overall.items, elapsed),
+                items_per_iter: if overall.iters > 0 {
+                    overall.items as f64 / overall.iters as f64
                 } else {
                     0.0
                 },
-                bytes_per_item: counter.bytes.checked_div(counter.items),
+                bytes_per_item: overall.bytes.checked_div(overall.items),
             },
 
-            bytes: BytesSummary { total: counter.bytes, rate: rate(counter.bytes, elapsed) },
+            bytes: BytesSummary { total: overall.bytes, rate: rate(overall.bytes, elapsed) },
         };
 
         let latency = if report.hist.is_empty() {

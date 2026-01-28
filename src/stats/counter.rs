@@ -1,7 +1,7 @@
 //! Basic counter for tracking benchmark metrics.
 //!
 //! This module provides [`Counter`], a simple structure for accumulating
-//! iteration counts, item counts, byte counts, and total duration.
+//! iteration counts, item counts, byte counts, and total latency.
 
 use std::time::Duration;
 
@@ -13,18 +13,18 @@ use crate::report::IterReport;
 /// - Number of iterations completed
 /// - Number of items processed (e.g., requests, records)
 /// - Number of bytes transferred
-/// - Total duration of all iterations
+/// - Total latency of all iterations
 ///
 /// # Operations
 ///
-/// - Can be accumulated from [`IterReport`] using [`append`](Self::append).
+/// - Can be accumulated from [`IterReport`] using [`record`](Self::record).
 /// - Supports subtraction via `-=` for calculating deltas.
 ///
 /// # Example
 ///
 /// ```ignore
 /// let mut counter = Counter::default();
-/// counter.append(&iter_report);  // Accumulate from an iteration report
+/// counter.record(&iter_report);  // Accumulate from an iteration report
 /// println!("Total iterations: {}", counter.iters);
 /// ```
 #[derive(Default, Clone, Copy, Debug)]
@@ -35,17 +35,17 @@ pub struct Counter {
     pub items: u64,
     /// Number of bytes transferred or processed.
     pub bytes: u64,
-    /// Total duration of all iterations combined.
-    pub duration: Duration,
+    /// Sum of iteration latencies.
+    pub latency_sum: Duration,
 }
 
 impl Counter {
     /// Accumulate metrics from a single iteration report.
-    pub fn append(&mut self, stats: &IterReport) {
+    pub fn record(&mut self, report: &IterReport) {
         self.iters += 1;
-        self.items += stats.items;
-        self.bytes += stats.bytes;
-        self.duration += stats.duration;
+        self.items += report.items;
+        self.bytes += report.bytes;
+        self.latency_sum += report.duration;
     }
 }
 
@@ -54,7 +54,7 @@ impl std::ops::SubAssign<&Counter> for Counter {
         self.iters -= rhs.iters;
         self.items -= rhs.items;
         self.bytes -= rhs.bytes;
-        self.duration -= rhs.duration;
+        self.latency_sum -= rhs.latency_sum;
     }
 }
 

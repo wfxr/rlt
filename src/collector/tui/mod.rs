@@ -47,7 +47,7 @@ use crate::{
     histogram::LatencyHistogram,
     report::{BenchReport, IterReport},
     runner::BenchOpts,
-    stats::{IterStats, RotateDiffWindow, RotateWindowGroup},
+    stats::{IterStats, MultiScaleStatsWindow, RecentStatsWindow},
     status::Status,
 };
 
@@ -136,11 +136,11 @@ impl TuiCollector {
         let clock = self.bench_opts.clock.clone();
         let mut terminal = Terminal::new()?;
 
-        let mut latest_iters = RotateWindowGroup::new(nonzero!(60usize), TimeWindow::variants().iter().copied())?;
+        let mut latest_iters = MultiScaleStatsWindow::new(nonzero!(60usize), TimeWindow::variants().iter().copied())?;
         let mut latest_iters_ticker = clock.ticker(SECOND);
 
-        let mut latest_stats = RotateDiffWindow::new(self.fps.into());
-        let mut latest_stats_ticker = clock.ticker(SECOND / self.fps.get() as u32);
+        let mut recent_stats = RecentStatsWindow::new(self.fps.into());
+        let mut recent_stats_ticker = clock.ticker(SECOND / self.fps.get() as u32);
 
         let mut ui_ticker = tokio::time::interval(SECOND / self.fps.get() as u32);
         ui_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
@@ -156,12 +156,12 @@ impl TuiCollector {
                     tokio::select! {
                         biased;
                         _ = ui_ticker.tick() => break,
-                        _ = latest_stats_ticker.tick() => {
-                            latest_stats.rotate(stats.counter);
+                        _ = recent_stats_ticker.tick() => {
+                            recent_stats.record(stats.overall);
                             continue;
                         }
                         _ = latest_iters_ticker.tick() => {
-                            latest_iters.rotate();
+                            latest_iters.tick();
                             continue;
                         }
                         r = self.res_rx.recv() => match r {
@@ -169,7 +169,7 @@ impl TuiCollector {
                                 *status_dist.entry(report.status).or_default() += 1;
                                 hist.record(report.duration)?;
                                 latest_iters.push(&report);
-                                stats.append(&report);
+                                stats.record(&report);
                             }
                             Some(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
                             None => {
@@ -192,12 +192,12 @@ impl TuiCollector {
                 let tw = self.state.tm_win.effective(elapsed);
                 render::render_dashboard(
                     f,
-                    &stats.counter,
+                    &stats.overall,
                     elapsed,
                     &self.bench_opts,
                     paused,
                     self.state.finished,
-                    &latest_stats,
+                    &recent_stats,
                     tw,
                     status_dist,
                     error_dist,

@@ -64,7 +64,7 @@ impl super::ReportCollector for SilentCollector {
                     Some(Ok(report)) => {
                         *status_dist.entry(report.status).or_default() += 1;
                         hist.record(report.duration)?;
-                        stats.append(&report);
+                        stats.record(&report);
                     }
                     Some(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
                     None => break,
