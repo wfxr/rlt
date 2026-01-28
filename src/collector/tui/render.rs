@@ -12,7 +12,7 @@ use crate::{
     duration::DurationExt,
     histogram::{LatencyHistogram, PERCENTAGES},
     runner::BenchOpts,
-    stats::{Counter, RotateDiffWindowGroup, RotateWindowGroup},
+    stats::{Counter, RotateDiffWindow, RotateWindowGroup},
     status::{Status, StatusKind},
     util::{IntoAdjustedByte, TryIntoAdjustedByte},
 };
@@ -27,7 +27,7 @@ pub(super) fn render_dashboard(
     opts: &BenchOpts,
     paused: bool,
     finished: bool,
-    latest_stats: &RotateDiffWindowGroup,
+    latest_stats: &RotateDiffWindow,
     tw: TimeWindow,
     status_dist: &HashMap<Status, u64>,
     error_dist: &HashMap<String, u64>,
@@ -73,13 +73,8 @@ pub(super) fn render_dashboard(
     render_tips(frame, rows[4]);
 }
 
-fn render_stats_timewin(frame: &mut Frame, area: Rect, stats: &RotateDiffWindowGroup, tw: TimeWindow) {
-    let (counter, duration) = match tw {
-        TimeWindow::Second => stats.counter_last_sec(),
-        TimeWindow::TenSec => stats.counter_last_10sec(),
-        TimeWindow::Minute => stats.counter_last_min(),
-        TimeWindow::TenMin => stats.counter_last_10min(),
-    };
+fn render_stats_timewin(frame: &mut Frame, area: Rect, stats: &RotateDiffWindow, tw: TimeWindow) {
+    let (counter, duration) = stats.counter_for_secs(tw as usize);
 
     render_stats(
         frame,
