@@ -9,13 +9,13 @@
 //! - [`Counter`] - Tracks basic metrics: iterations, items, bytes, and duration.
 //! - [`IterStats`] - Aggregates iteration statistics with per-status breakdowns.
 //! - [`RotateWindowGroup`] - Manages multiple rolling windows at different time scales.
-//! - [`RotateDiffWindowGroup`] - Provides rate calculations over sliding windows.
+//! - [`RotateDiffWindow`] - Provides rate calculations over sliding windows.
 
 mod counter;
 mod window;
 
 pub use counter::Counter;
-pub use window::{RotateDiffWindowGroup, RotateWindowGroup};
+pub use window::{RotateDiffWindow, RotateWindowGroup};
 
 use std::collections::HashMap;
 

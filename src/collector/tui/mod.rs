@@ -47,7 +47,7 @@ use crate::{
     histogram::LatencyHistogram,
     report::{BenchReport, IterReport},
     runner::BenchOpts,
-    stats::{IterStats, RotateDiffWindowGroup, RotateWindowGroup},
+    stats::{IterStats, RotateDiffWindow, RotateWindowGroup},
     status::Status,
 };
 
@@ -139,7 +139,7 @@ impl TuiCollector {
         let mut latest_iters = RotateWindowGroup::new(nonzero!(60usize));
         let mut latest_iters_ticker = clock.ticker(SECOND);
 
-        let mut latest_stats = RotateDiffWindowGroup::new(self.fps.into());
+        let mut latest_stats = RotateDiffWindow::new(self.fps.into());
         let mut latest_stats_ticker = clock.ticker(SECOND / self.fps.get() as u32);
 
         let mut ui_ticker = tokio::time::interval(SECOND / self.fps.get() as u32);

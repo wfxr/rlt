@@ -12,7 +12,7 @@
 //!
 //! - [`RotateWindow`] - A single rolling window with configurable bucket count.
 //! - [`RotateWindowGroup`] - Multiple windows at different time scales (1s, 10s, 1min, 10min).
-//! - [`RotateDiffWindowGroup`] - Calculates rate statistics over sliding windows.
+//! - [`RotateDiffWindow`] - Calculates rate statistics over sliding windows.
 
 use std::{collections::VecDeque, num::NonZeroUsize};
 
@@ -67,6 +67,10 @@ impl RotateWindow {
     fn back(&self) -> &Counter {
         // SAFETY: `buckets` is never empty
         self.buckets.back().unwrap()
+    }
+
+    fn get(&self, index: usize) -> Option<&Counter> {
+        self.buckets.get(index)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Counter> {
@@ -148,45 +152,35 @@ impl RotateWindowGroup {
     }
 }
 
-/// A group of sliding windows for calculating rate statistics.
+/// A sliding window for calculating rate statistics over arbitrary time spans.
 ///
-/// Unlike [`RotateWindowGroup`] which stores raw statistics, this structure
-/// stores cumulative snapshots and calculates differences to determine rates
-/// over various time periods.
+/// Unlike [`RotateWindowGroup`] which stores raw statistics in separate windows,
+/// this structure stores cumulative snapshots in a single window and calculates
+/// differences to determine rates over any requested time period.
 ///
-/// The windows rotate at a configurable frame rate (fps), storing snapshots
-/// of cumulative statistics. Rate calculations compare the newest and oldest
-/// snapshots to compute activity over the window's time span.
+/// The window rotates at a configurable frame rate (fps), storing snapshots
+/// of cumulative statistics. Rate calculations compare the current snapshot
+/// with a snapshot from N frames ago to compute activity over the time span.
 ///
 /// Note: This stores only [`Counter`] snapshots (not `IterStats`) to keep the per-frame
 /// rotation in the TUI hot path allocation-free.
 ///
-/// # Time Windows
+/// # Example
 ///
-/// - Last 1 second
-/// - Last 10 seconds
-/// - Last 1 minute
-/// - Last 10 minutes
-pub struct RotateDiffWindowGroup {
+/// ```ignore
+/// let mut win = RotateDiffWindow::new(nonzero!(10usize)); // 10 fps
+/// win.rotate(counter);
+/// let (delta, duration) = win.counter_for_secs(1);  // last 1 second
+/// let (delta, duration) = win.counter_for_secs(60); // last 1 minute
+/// ```
+pub struct RotateDiffWindow {
     interval: Duration,
-    counters_last_sec: RotateWindow,
-    counters_last_10sec: RotateWindow,
-    counters_last_min: RotateWindow,
-    counters_last_10min: RotateWindow,
+    fps: usize,
+    window: RotateWindow,
 }
 
-impl RotateDiffWindowGroup {
-    /// Returns mutable references to all internal windows.
-    fn all_windows(&mut self) -> [&mut RotateWindow; 4] {
-        [
-            &mut self.counters_last_sec,
-            &mut self.counters_last_10sec,
-            &mut self.counters_last_min,
-            &mut self.counters_last_10min,
-        ]
-    }
-
-    /// Creates a new diff window group with the specified frame rate.
+impl RotateDiffWindow {
+    /// Creates a new diff window with the specified frame rate.
     ///
     /// The frame rate determines how often [`rotate()`](Self::rotate) should be called.
     /// Higher frame rates provide smoother statistics but use more memory.
@@ -196,18 +190,16 @@ impl RotateDiffWindowGroup {
     /// * `fps` - Frames (rotations) per second.
     pub fn new(fps: NonZeroUsize) -> Self {
         let interval = Duration::from_secs_f64(1.0 / fps.get() as f64);
-        let mut group = Self {
+        let mut win = Self {
             interval,
-            counters_last_sec: RotateWindow::new(fps.saturating_add(1)),
-            counters_last_10sec: RotateWindow::new(fps.saturating_mul(nonzero!(10usize)).saturating_add(1)),
-            counters_last_min: RotateWindow::new(fps.saturating_mul(nonzero!(60usize)).saturating_add(1)),
-            counters_last_10min: RotateWindow::new(fps.saturating_mul(nonzero!(600usize)).saturating_add(1)),
+            fps: fps.get(),
+            window: RotateWindow::new(fps.saturating_mul(nonzero!(600usize)).saturating_add(1)),
         };
-        group.rotate(Counter::default());
-        group
+        win.rotate(Counter::default());
+        win
     }
 
-    /// Rotates all windows with a new cumulative statistics snapshot.
+    /// Rotates the window with a new cumulative statistics snapshot.
     ///
     /// This should be called at the configured frame rate (fps times per second).
     ///
@@ -215,35 +207,92 @@ impl RotateDiffWindowGroup {
     ///
     /// * `counter` - The current cumulative statistics snapshot.
     pub fn rotate(&mut self, counter: Counter) {
-        // Hot path (called at FPS): rotate cheap `Counter` snapshots to avoid per-frame allocations.
-        for s in self.all_windows().iter_mut() {
-            s.rotate(counter);
+        self.window.rotate(counter);
+    }
+
+    /// Returns statistics delta and duration for the specified time window.
+    ///
+    /// If the window doesn't have enough data for the requested time span,
+    /// returns the maximum available data and the actual duration covered.
+    ///
+    /// # Arguments
+    ///
+    /// * `secs` - The time window in seconds (e.g., 1, 10, 60, 600).
+    pub fn counter_for_secs(&self, secs: usize) -> (Counter, Duration) {
+        let frames_back = self.fps * secs;
+        let clamped = frames_back.min(self.window.len().saturating_sub(1));
+        let duration = clamped as u32 * self.interval;
+        let back = self.window.get(clamped).unwrap_or_else(|| self.window.back());
+        (self.window.front() - back, duration)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_counter(iters: u64) -> Counter {
+        Counter {
+            iters,
+            items: iters * 10,
+            bytes: iters * 100,
+            duration: Duration::from_millis(iters),
         }
     }
 
-    /// Returns statistics delta and duration for the last 1 second.
-    pub fn counter_last_sec(&self) -> (Counter, Duration) {
-        self.diff(&self.counters_last_sec)
+    #[test]
+    fn rotate_diff_window_one_sec() {
+        let fps = nonzero!(10usize); // 10 frames per second
+        let mut win = RotateDiffWindow::new(fps);
+
+        // Simulate 1 second of data (10 frames at 10 fps)
+        for i in 1..=10 {
+            win.rotate(make_counter(i * 100));
+        }
+
+        let (counter, duration) = win.counter_for_secs(1);
+        // Diff between frame 10 (iters=1000) and frame 0 (iters=0)
+        assert_eq!(counter.iters, 1000);
+        assert_eq!(duration, Duration::from_secs(1));
     }
 
-    /// Returns statistics delta and duration for the last 10 seconds.
-    pub fn counter_last_10sec(&self) -> (Counter, Duration) {
-        self.diff(&self.counters_last_10sec)
+    #[test]
+    fn rotate_diff_window_partial_fill() {
+        let fps = nonzero!(10usize);
+        let mut win = RotateDiffWindow::new(fps);
+
+        // Only 5 frames (0.5 second worth)
+        for i in 1..=5 {
+            win.rotate(make_counter(i * 10));
+        }
+
+        let (counter, duration) = win.counter_for_secs(1);
+        // Window not full yet, should use available data
+        // Note: new() initializes with 2 default counters (one in RotateWindow::new, one in win.rotate)
+        // So after 5 rotations we have 7 elements total, giving (7-1) * 100ms = 600ms
+        assert_eq!(counter.iters, 50); // 50 - 0
+        assert_eq!(duration, Duration::from_millis(600)); // 6 intervals * 100ms
     }
 
-    /// Returns statistics delta and duration for the last 1 minute.
-    pub fn counter_last_min(&self) -> (Counter, Duration) {
-        self.diff(&self.counters_last_min)
-    }
+    #[test]
+    fn rotate_diff_window_multiple_spans() {
+        let fps = nonzero!(10usize);
+        let mut win = RotateDiffWindow::new(fps);
 
-    /// Returns statistics delta and duration for the last 10 minutes.
-    pub fn counter_last_10min(&self) -> (Counter, Duration) {
-        self.diff(&self.counters_last_10min)
-    }
+        // Fill enough for 10 seconds (100 frames)
+        for i in 1..=100 {
+            win.rotate(make_counter(i));
+        }
 
-    /// Calculates the difference between the newest and oldest snapshots.
-    fn diff(&self, win: &RotateWindow) -> (Counter, Duration) {
-        let duration = (win.len() - 1) as u32 * self.interval;
-        (win.front() - win.back(), duration)
+        let (c1, d1) = win.counter_for_secs(1);
+        let (c10, d10) = win.counter_for_secs(10);
+
+        // 1 sec = 10 frames: diff between frame 100 and frame 90
+        assert_eq!(c1.iters, 100 - 90);
+        assert_eq!(d1, Duration::from_secs(1));
+
+        // 10 sec = 100 frames: diff between frame 100 and frame 0
+        assert_eq!(c10.iters, 100 - 0);
+        assert_eq!(d10, Duration::from_secs(10));
     }
 }
