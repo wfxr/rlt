@@ -22,9 +22,8 @@ cargo clippy                     # Run linter
 ### Core Traits
 
 **`BenchSuite`** (src/runner.rs) - For stateful benchmarks with per-worker state:
-- `state(worker_id)` - Initialize worker state (e.g., HTTP client, DB connection)
+- `setup(worker_id)` - Initialize and return worker state (e.g., HTTP client, DB connection)
 - `bench(state, info)` - Run single iteration, return `IterReport`
-- `setup(state, worker_id)` - Optional pre-benchmark setup per worker
 - `teardown(state, info)` - Optional cleanup per worker
 
 **`StatelessBenchSuite`** (src/runner.rs) - Simpler trait for stateless benchmarks:
@@ -50,7 +49,7 @@ cargo clippy                     # Run linter
 
 1. CLI parsed → `BenchCli` with concurrency, iterations, duration, warmup, rate
 2. Clock created in paused state
-3. Workers spawned, each calls `state()` then `setup()`
+3. Workers spawned, each calls `setup()`
 4. Warmup iterations run (results discarded)
 5. Barrier sync → clock resumed → main benchmark starts
 6. Results sent via mpsc channel to collector

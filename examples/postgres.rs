@@ -35,7 +35,7 @@ bench_cli!(DBBench, {
 impl BenchSuite for DBBench {
     type WorkerState = Client;
 
-    async fn state(&self, _: u32) -> Result<Self::WorkerState> {
+    async fn setup(&mut self, _worker_id: u32) -> Result<Self::WorkerState> {
         let (client, conn) = tokio_postgres::connect(
             &format!(
                 "host={} port={} user={} password='{}'",
@@ -54,15 +54,12 @@ impl BenchSuite for DBBench {
             }
         });
 
-        Ok(client)
-    }
-
-    async fn setup(&mut self, client: &mut Self::WorkerState, _: u32) -> Result<()> {
         client.execute("BEGIN", &[]).await?;
         client
             .execute("CREATE TABLE t(id SERIAL PRIMARY KEY, name TEXT)", &[])
             .await?;
-        Ok(())
+
+        Ok(client)
     }
 
     async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> Result<IterReport> {

@@ -76,7 +76,7 @@ bench_cli!(HttpBench, {
 impl BenchSuite for HttpBench {
     type WorkerState = Client;
 
-    async fn state(&self, _: u32) -> Result<Self::WorkerState> {
+    async fn setup(&mut self, _worker_id: u32) -> Result<Self::WorkerState> {
         Ok(Client::new())
     }
 
