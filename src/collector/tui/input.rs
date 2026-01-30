@@ -2,6 +2,8 @@ use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
+use crate::phase::{BenchPhase, RunState};
+
 use super::state::TimeWindowMode;
 
 impl super::TuiCollector {
@@ -27,14 +29,27 @@ impl super::TuiCollector {
                         self.cancel.cancel();
                         return Ok(true);
                     }
-                    (Char('p') | Pause, _) if !self.state.finished => {
-                        let pause = !*self.pause.borrow();
-                        if pause {
-                            clock.pause();
-                        } else {
-                            clock.resume();
+                    (Char('p') | Pause, _) => {
+                        // Only mutate the clock once we're in the actual bench phase; setup/warmup
+                        // runs with a paused clock by design.
+                        let is_bench_phase = matches!(&*self.phase_rx.borrow(), BenchPhase::Bench);
+                        match self.state.run_state {
+                            RunState::Paused => {
+                                if is_bench_phase {
+                                    clock.resume();
+                                }
+                                self.state.run_state = RunState::Running;
+                                self.run_state_tx.send_replace(self.state.run_state);
+                            }
+                            RunState::Running => {
+                                if is_bench_phase {
+                                    clock.pause();
+                                }
+                                self.state.run_state = RunState::Paused;
+                                self.run_state_tx.send_replace(self.state.run_state);
+                            }
+                            RunState::Finished => {}
                         }
-                        self.pause.send_replace(pause);
                     }
                     #[cfg(feature = "tracing")]
                     (Char('l'), _) => self.state.log.display = !self.state.log.display,

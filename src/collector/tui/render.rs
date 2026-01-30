@@ -11,6 +11,7 @@ use std::{collections::HashMap, time::Duration};
 use crate::{
     duration::DurationExt,
     histogram::{LatencyHistogram, PERCENTAGES},
+    phase::{BenchPhase, RunState},
     runner::BenchOpts,
     stats::{Counter, MultiScaleStatsWindow, RecentStatsWindow},
     status::{Status, StatusKind},
@@ -25,14 +26,14 @@ pub(super) fn render_dashboard(
     counter: &Counter,
     elapsed: Duration,
     opts: &BenchOpts,
-    paused: bool,
-    finished: bool,
+    run_state: RunState,
     recent_stats: &RecentStatsWindow,
     tw: TimeWindow,
     status_dist: &HashMap<Status, u64>,
     error_dist: &HashMap<String, u64>,
     latest_iters: &MultiScaleStatsWindow,
     hist: &LatencyHistogram,
+    phase: &BenchPhase,
 ) {
     let progress_height = 3;
     let stats_height = 5;
@@ -63,7 +64,7 @@ pub(super) fn render_dashboard(
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .split(rows[2]);
 
-    render_process_gauge(frame, rows[3], counter, elapsed, opts, paused, finished);
+    render_process_gauge(frame, rows[3], counter, elapsed, opts, run_state, phase);
     render_stats_overall(frame, mid[1], counter, elapsed);
     render_stats_timewin(frame, mid[0], recent_stats, tw);
     render_status_dist(frame, mid[2], status_dist);
@@ -140,56 +141,74 @@ fn render_process_gauge(
     counter: &Counter,
     elapsed: Duration,
     opts: &BenchOpts,
-    paused: bool,
-    finished: bool,
+    run_state: RunState,
+    phase: &BenchPhase,
 ) {
+    macro_rules! ratio {
+        ($completed:expr, $total:expr) => {
+            ($completed as f64 / $total as f64).clamp(0.0, 1.0)
+        };
+    }
+
     let rounded = |duration: Duration| humantime::Duration::from(Duration::from_secs(duration.as_secs_f64() as u64));
     let time_progress = |duration: &Duration| {
         (
-            (elapsed.as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0),
+            ratio!(elapsed.as_secs_f64(), duration.as_secs_f64()),
             format!("{} / {}", rounded(elapsed), rounded(*duration)),
         )
     };
-    let iter_progress = |iters: &u64| {
-        (
-            (counter.iters as f64 / *iters as f64).clamp(0.0, 1.0),
-            format!("{} / {}", counter.iters, iters),
-        )
+    let iter_progress = |iters: &u64| (ratio!(counter.iters, *iters), format!("{} / {}", counter.iters, iters));
+
+    // Handle phase-specific progress display
+    let (progress, mut label) = match phase {
+        BenchPhase::Pending => (0.0, "Pending".to_string()),
+        &BenchPhase::Setup { completed, total } => {
+            (ratio!(completed, total), format!("Setup: {} / {}", completed, total))
+        }
+        &BenchPhase::Warmup { completed, total } => {
+            (ratio!(completed, total), format!("Warmup: {} / {}", completed, total))
+        }
+        BenchPhase::Bench => {
+            let (progress, label) = match opts {
+                BenchOpts { duration: None, iterations: None, .. } => (0.0, "INFINITE".to_string()),
+                BenchOpts { duration: Some(duration), iterations: None, .. } => time_progress(duration),
+                BenchOpts { duration: None, iterations: Some(iters), .. } => iter_progress(iters),
+                BenchOpts { duration: Some(duration), iterations: Some(iters), .. } => {
+                    let iter_ratio = ratio!(counter.iters, *iters);
+                    let time_ratio = ratio!(elapsed.as_secs_f64(), duration.as_secs_f64());
+                    if iter_ratio > time_ratio {
+                        iter_progress(iters)
+                    } else {
+                        time_progress(duration)
+                    }
+                }
+            };
+            (progress, label)
+        }
     };
 
-    let (progress, mut label) = match opts {
-        BenchOpts { duration: None, iterations: None, .. } => (0.0, "INFINITE".to_string()),
-        BenchOpts { duration: Some(duration), iterations: None, .. } => time_progress(duration),
-        BenchOpts { duration: None, iterations: Some(iters), .. } => iter_progress(iters),
-        BenchOpts { duration: Some(duration), iterations: Some(iters), .. } => {
-            let iter_ratio = counter.iters as f64 / *iters as f64;
-            let time_ratio = elapsed.as_secs_f64() / duration.as_secs_f64();
-            if iter_ratio > time_ratio {
-                iter_progress(iters)
-            } else {
-                time_progress(duration)
+    let style = match run_state {
+        RunState::Paused | RunState::Finished => Style::new().fg(Color::Yellow),
+        RunState::Running => match phase {
+            BenchPhase::Pending | BenchPhase::Setup { .. } | BenchPhase::Warmup { .. } => {
+                Style::new().fg(Color::Magenta)
             }
-        }
+            BenchPhase::Bench => Style::new().fg(Color::Cyan),
+        },
     };
 
-    let style = match (finished, paused) {
-        (true, _) => {
-            label.push_str(" (FINISHED)");
-            Style::new().fg(Color::Yellow)
-        }
-        (_, true) => {
-            label.push_str(" (PAUSED)");
-            Style::new().fg(Color::Yellow)
-        }
-        (false, false) => Style::new().fg(Color::Cyan),
-    };
+    match run_state {
+        RunState::Finished => label.push_str(" (FINISHED)"),
+        RunState::Paused => label.push_str(" (PAUSED)"),
+        RunState::Running => {}
+    }
 
-    let guage = Gauge::default()
+    let gauge = Gauge::default()
         .block(Block::new().title("Progress").borders(Borders::ALL))
         .gauge_style(style)
         .label(label)
         .ratio(progress);
-    frame.render_widget(guage, area);
+    frame.render_widget(gauge, area);
 }
 
 fn render_status_dist(frame: &mut Frame, area: Rect, status_dist: &HashMap<Status, u64>) {

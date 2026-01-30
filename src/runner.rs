@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -25,6 +25,7 @@ cfg_if::cfg_if! {
 
 use crate::{
     clock::Clock,
+    phase::{BenchPhase, RunState},
     // rate_limiter::{self, RateLimiter},
     report::IterReport,
 };
@@ -32,7 +33,11 @@ use crate::{
 /// Core options for the benchmark runner.
 #[derive(Clone, Debug)]
 pub struct BenchOpts {
-    /// Start time of the benchmark.
+    /// Benchmark clock used for measuring elapsed time and driving tickers.
+    ///
+    /// The runner typically starts this clock paused and resumes it when entering the main
+    /// [`BenchPhase::Bench`] phase, so setup/warmup time is excluded from the reported elapsed time.
+    /// It can be paused/resumed (e.g. by the TUI) to implement runtime pause.
     pub clock: Clock,
 
     /// Number of concurrent workers.
@@ -104,9 +109,10 @@ where
     suite: BS,
     opts: BenchOpts,
     res_tx: mpsc::UnboundedSender<Result<IterReport>>,
-    pause: watch::Receiver<bool>,
+    run_state_rx: watch::Receiver<RunState>,
     cancel: CancellationToken,
     seq: Arc<AtomicU64>,
+    phase_tx: watch::Sender<BenchPhase>,
 }
 
 /// Information about the current iteration.
@@ -139,10 +145,19 @@ where
         suite: BS,
         opts: BenchOpts,
         res_tx: mpsc::UnboundedSender<Result<IterReport>>,
-        pause: watch::Receiver<bool>,
+        run_state_rx: watch::Receiver<RunState>,
         cancel: CancellationToken,
+        phase_tx: watch::Sender<BenchPhase>,
     ) -> Self {
-        Self { suite, opts, res_tx, pause, cancel, seq: Arc::default() }
+        Self {
+            suite,
+            opts,
+            res_tx,
+            run_state_rx,
+            cancel,
+            seq: Arc::default(),
+            phase_tx,
+        }
     }
 
     async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) -> Result<IterReport> {
@@ -174,6 +189,16 @@ where
         // Global sequence counter for warmup phase
         let warmup_seq = Arc::new(AtomicU64::new(0));
 
+        // Counter to track warmup completion progress.
+        //
+        // NOTE: Warmup runs concurrently across workers, so we must count completions
+        // rather than using the issued global sequence number (completions may finish
+        // out-of-order).
+        let warmup_completed = Arc::new(AtomicU64::new(0));
+
+        // Counter to track setup completion progress
+        let setup_completed = Arc::new(AtomicUsize::new(0));
+
         // Barrier to synchronize all workers after setup and warmup
         // All workers wait at the barrier, and the clock is started when all are ready
         let barrier = Arc::new(Barrier::new(workers as usize));
@@ -184,12 +209,20 @@ where
             let buckets = buckets.clone();
             let mut b = self.clone();
             let warmup_seq = warmup_seq.clone();
+            let warmup_completed = warmup_completed.clone();
+            let setup_completed = setup_completed.clone();
             let barrier = barrier.clone();
 
             set.spawn(async move {
                 let mut state = b.suite.setup(worker).await?;
                 let mut info = IterInfo::new(worker);
                 let cancel = b.cancel.clone();
+
+                // Report setup progress
+                let completed = setup_completed.fetch_add(1, Ordering::Relaxed) + 1;
+                // Progress display must be best-effort; never fail the benchmark if receivers are gone.
+                b.phase_tx
+                    .send_replace(BenchPhase::Setup { completed, total: workers as usize });
 
                 // Wait for all workers to complete setup before starting bench loop
                 barrier.wait().await;
@@ -214,15 +247,26 @@ where
                         biased;
                         _ = cancel.cancelled() => break,
                         // Intentionally ignore warm-up results - they are not sent to the result channel
-                        _ = b.iteration(&mut state, &info) => (),
+                        _ = b.iteration(&mut state, &info) => {
+                            info.worker_seq += 1;
+
+                            // Report warmup progress after an iteration completes.
+                            let completed = warmup_completed.fetch_add(1, Ordering::Relaxed) + 1;
+                            b.phase_tx.send_replace(BenchPhase::Warmup { completed, total: warmup_iters });
+                        },
                     }
-                    info.worker_seq += 1;
                 }
 
                 // Wait for all workers to complete setup and warmup before starting main benchmark
                 // The leader (last worker to arrive) will start the clock
                 if barrier.wait().await.is_leader() {
-                    b.opts.clock.resume();
+                    b.phase_tx.send_replace(BenchPhase::Bench);
+
+                    // Only start the clock once the benchmark phase begins AND we're not paused.
+                    // When paused, the clock must not advance (e.g. duration mode should not count down).
+                    if *b.run_state_rx.borrow() != RunState::Paused {
+                        b.opts.clock.resume();
+                    }
                 }
 
                 // Reset worker sequence for main benchmark
@@ -283,8 +327,8 @@ where
     }
 
     async fn wait_if_paused(&mut self) {
-        while *self.pause.borrow() {
-            if self.pause.changed().await.is_err() {
+        while *self.run_state_rx.borrow() == RunState::Paused {
+            if self.run_state_rx.changed().await.is_err() {
                 return;
             }
         }
@@ -302,6 +346,7 @@ async fn join_all(set: &mut JoinSet<Result<()>>) -> Result<()> {
 mod tests {
     use super::*;
     use std::sync::Mutex;
+    use std::sync::atomic::AtomicBool;
     use std::time::Instant;
 
     use crate::{Status, clock::Clock, report::IterReport};
@@ -381,7 +426,8 @@ mod tests {
 
     async fn run_benchmark(suite: &TrackedSuite, concurrency: u32, warmups: u64, iterations: u64) -> Result<()> {
         let (res_tx, mut res_rx) = mpsc::unbounded_channel();
-        let (_pause_tx, pause_rx) = watch::channel(false);
+        let (_run_state_tx, run_state_rx) = watch::channel(RunState::Running);
+        let (phase_tx, _phase_rx) = watch::channel(BenchPhase::default());
         let cancel = CancellationToken::new();
 
         let opts = BenchOpts {
@@ -394,7 +440,7 @@ mod tests {
             rate: None,
         };
 
-        let runner = Runner::new(suite.clone(), opts, res_tx, pause_rx, cancel);
+        let runner = Runner::new(suite.clone(), opts, res_tx, run_state_rx, cancel, phase_tx);
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
 
         runner.run().await?;
@@ -454,5 +500,120 @@ mod tests {
             suite.verify_order(Phase::Setup, Phase::Bench),
             "setup should complete before bench"
         );
+    }
+
+    #[tokio::test]
+    async fn test_phase_updates_are_best_effort_when_receiver_is_dropped() {
+        let suite = TrackedSuite::new(0, Clock::new_paused());
+        let (res_tx, mut res_rx) = mpsc::unbounded_channel();
+        let (_run_state_tx, run_state_rx) = watch::channel(RunState::Running);
+        let (phase_tx, phase_rx) = watch::channel(BenchPhase::default());
+        drop(phase_rx);
+        let cancel = CancellationToken::new();
+
+        let opts = BenchOpts {
+            clock: suite.clock.clone(),
+            concurrency: 2,
+            iterations: Some(1),
+            duration: None,
+            warmups: 1,
+            #[cfg(feature = "rate_limit")]
+            rate: None,
+        };
+
+        let runner = Runner::new(suite.clone(), opts, res_tx, run_state_rx, cancel, phase_tx);
+        let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
+
+        runner.run().await.unwrap();
+        drop(drain);
+    }
+
+    #[derive(Clone)]
+    struct PauseAtBenchSuite {
+        warmups: u64,
+        // Signals once when the global "last warmup iteration" starts running.
+        last_warmup_started: Arc<tokio::sync::Notify>,
+        last_warmup_seen: Arc<AtomicBool>,
+        delay: Duration,
+    }
+
+    #[async_trait]
+    impl BenchSuite for PauseAtBenchSuite {
+        type WorkerState = ();
+
+        async fn setup(&mut self, _worker_id: u32) -> Result<()> {
+            Ok(())
+        }
+
+        async fn bench(&mut self, _: &mut (), info: &IterInfo) -> Result<IterReport> {
+            if self.warmups > 0
+                && info.runner_seq + 1 == self.warmups
+                && !self.last_warmup_seen.swap(true, Ordering::Relaxed)
+            {
+                self.last_warmup_started.notify_one();
+                tokio::time::sleep(self.delay).await;
+            }
+
+            Ok(IterReport {
+                duration: Duration::from_micros(100),
+                status: Status::success(200),
+                bytes: 0,
+                items: 0,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn test_paused_does_not_start_clock_at_bench_transition() {
+        let clock = Clock::new_paused();
+        let warmups = 8;
+        let last_warmup_started = Arc::new(tokio::sync::Notify::new());
+
+        let suite = PauseAtBenchSuite {
+            warmups,
+            last_warmup_started: last_warmup_started.clone(),
+            last_warmup_seen: Arc::new(AtomicBool::new(false)),
+            delay: Duration::from_millis(50),
+        };
+
+        let (res_tx, mut res_rx) = mpsc::unbounded_channel();
+        let (run_state_tx, run_state_rx) = watch::channel(RunState::Running);
+        let (phase_tx, mut phase_rx) = watch::channel(BenchPhase::default());
+        let cancel = CancellationToken::new();
+
+        let opts = BenchOpts {
+            clock: clock.clone(),
+            concurrency: 2,
+            iterations: Some(2),
+            duration: None,
+            warmups,
+            #[cfg(feature = "rate_limit")]
+            rate: None,
+        };
+
+        let runner = Runner::new(suite, opts, res_tx, run_state_rx, cancel, phase_tx);
+        let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
+        let handle = tokio::spawn(async move { runner.run().await });
+
+        // Pause while the last warmup iteration is still running, so the transition to Bench happens under Paused.
+        last_warmup_started.notified().await;
+        run_state_tx.send_replace(RunState::Paused);
+
+        // Wait for the Bench transition.
+        loop {
+            if matches!(&*phase_rx.borrow(), BenchPhase::Bench) {
+                break;
+            }
+            phase_rx.changed().await.unwrap();
+        }
+
+        assert_eq!(clock.elapsed(), Duration::ZERO);
+
+        // Simulate TUI: resume clock + unpause once bench phase is reached.
+        clock.resume();
+        run_state_tx.send_replace(RunState::Running);
+
+        handle.await.unwrap().unwrap();
+        drop(drain);
     }
 }
