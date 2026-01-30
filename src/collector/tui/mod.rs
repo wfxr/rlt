@@ -45,6 +45,7 @@ use terminal::Terminal;
 use crate::{
     collector::ReportCollector,
     histogram::LatencyHistogram,
+    phase::{BenchPhase, RunState},
     report::{BenchReport, IterReport},
     runner::BenchOpts,
     stats::{IterStats, MultiScaleStatsWindow, RecentStatsWindow},
@@ -77,12 +78,14 @@ pub struct TuiCollector {
     pub(crate) fps: NonZeroU8,
     /// Channel receiver for iteration reports from workers.
     pub(crate) res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
-    /// Watch channel sender for pause/resume control.
-    pub(crate) pause: watch::Sender<bool>,
+    /// Watch channel sender for run state control (pause/resume/finished).
+    pub(crate) run_state_tx: watch::Sender<RunState>,
     /// Cancellation token for graceful shutdown.
     pub(crate) cancel: CancellationToken,
     /// Whether to exit automatically when the benchmark finishes.
     pub(crate) auto_quit: bool,
+    /// Watch channel receiver for benchmark phase status.
+    pub(crate) phase_rx: watch::Receiver<BenchPhase>,
 
     /// Internal TUI state (time window selection, log state, etc.).
     state: TuiCollectorState,
@@ -94,17 +97,27 @@ impl TuiCollector {
         bench_opts: BenchOpts,
         fps: NonZeroU8,
         res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
-        pause: watch::Sender<bool>,
+        run_state_tx: watch::Sender<RunState>,
         cancel: CancellationToken,
         auto_quit: bool,
+        phase_rx: watch::Receiver<BenchPhase>,
     ) -> Result<Self> {
         let state = TuiCollectorState {
             tm_win: TimeWindowMode::Auto,
-            finished: false,
+            run_state: RunState::Running,
             #[cfg(feature = "tracing")]
             log: tui_log::LogState::from_env()?,
         };
-        Ok(Self { bench_opts, fps, res_rx, pause, cancel, auto_quit, state })
+        Ok(Self {
+            bench_opts,
+            fps,
+            res_rx,
+            run_state_tx,
+            cancel,
+            auto_quit,
+            phase_rx,
+            state,
+        })
     }
 }
 
@@ -146,7 +159,7 @@ impl TuiCollector {
         ui_ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 
         loop {
-            if self.state.finished {
+            if self.state.run_state == RunState::Finished {
                 if self.auto_quit {
                     return Ok(());
                 }
@@ -174,7 +187,8 @@ impl TuiCollector {
                             Some(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
                             None => {
                                 clock.pause();
-                                self.state.finished = true;
+                                self.state.run_state = RunState::Finished;
+                                self.run_state_tx.send_replace(RunState::Finished);
                                 break;
                             }
                         }
@@ -188,21 +202,21 @@ impl TuiCollector {
             }
 
             terminal.draw(|f| {
-                let paused = *self.pause.borrow();
                 let tw = self.state.tm_win.effective(elapsed);
+                let phase = self.phase_rx.borrow().clone();
                 render::render_dashboard(
                     f,
                     &stats.overall,
                     elapsed,
                     &self.bench_opts,
-                    paused,
-                    self.state.finished,
+                    self.state.run_state,
                     &recent_stats,
                     tw,
                     status_dist,
                     error_dist,
                     &latest_iters,
                     hist,
+                    &phase,
                 );
 
                 #[cfg(feature = "tracing")]
