@@ -58,17 +58,12 @@ pub trait BenchSuite: Clone {
     /// The state for each worker during the benchmark.
     type WorkerState: Send;
 
-    /// Initialize the state for a worker.
-    async fn state(&self, worker_id: u32) -> Result<Self::WorkerState>;
+    /// Setup procedure before each worker starts.
+    /// Initialize and return the worker state (e.g., HTTP client, DB connection).
+    async fn setup(&mut self, worker_id: u32) -> Result<Self::WorkerState>;
 
     /// Run a single iteration of the benchmark.
     async fn bench(&mut self, state: &mut Self::WorkerState, info: &IterInfo) -> Result<IterReport>;
-
-    /// Setup procedure before each worker starts.
-    #[allow(unused_variables)]
-    async fn setup(&mut self, state: &mut Self::WorkerState, worker_id: u32) -> Result<()> {
-        Ok(())
-    }
 
     /// Teardown procedure after each worker finishes.
     #[allow(unused_variables)]
@@ -91,7 +86,7 @@ where
 {
     type WorkerState = ();
 
-    async fn state(&self, _: u32) -> Result<()> {
+    async fn setup(&mut self, _worker_id: u32) -> Result<()> {
         Ok(())
     }
 
@@ -192,14 +187,11 @@ where
             let barrier = barrier.clone();
 
             set.spawn(async move {
-                let mut state = b.suite.state(worker).await?;
+                let mut state = b.suite.setup(worker).await?;
                 let mut info = IterInfo::new(worker);
                 let cancel = b.cancel.clone();
 
-                // Setup is called once per worker
-                b.suite.setup(&mut state, worker).await?;
-
-                // Wait for all workers to complete setup before starting warmup
+                // Wait for all workers to complete setup before starting bench loop
                 barrier.wait().await;
 
                 // Run warm-up iterations first
@@ -227,14 +219,14 @@ where
                     info.worker_seq += 1;
                 }
 
-                // Reset worker sequence for main benchmark
-                info.worker_seq = 0;
-
                 // Wait for all workers to complete setup and warmup before starting main benchmark
                 // The leader (last worker to arrive) will start the clock
                 if barrier.wait().await.is_leader() {
                     b.opts.clock.resume();
                 }
+
+                // Reset worker sequence for main benchmark
+                info.worker_seq = 0;
 
                 // Run main benchmark iterations
                 loop {
@@ -363,11 +355,7 @@ mod tests {
     impl BenchSuite for TrackedSuite {
         type WorkerState = ();
 
-        async fn state(&self, _: u32) -> Result<()> {
-            Ok(())
-        }
-
-        async fn setup(&mut self, _: &mut (), worker_id: u32) -> Result<()> {
+        async fn setup(&mut self, worker_id: u32) -> Result<()> {
             if worker_id == 0 {
                 tokio::time::sleep(Duration::from_millis(self.setup_delay_ms)).await;
             }
