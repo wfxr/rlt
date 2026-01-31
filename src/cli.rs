@@ -76,6 +76,7 @@ use crate::{
     baseline::{self, BaselineName, RegressionMetric, Verdict},
     clock::Clock,
     collector::{ReportCollector, SilentCollector, TuiCollector},
+    phase::{BenchPhase, RunState},
     reporter::{BenchReporter, JsonReporter, TextReporter},
     runner::{BenchOpts, BenchSuite, Runner},
 };
@@ -301,22 +302,34 @@ where
 
     // Now run the benchmark
     let (res_tx, res_rx) = mpsc::unbounded_channel();
-    let (pause_tx, pause_rx) = watch::channel(false);
+    let (run_state_tx, run_state_rx) = watch::channel(RunState::Running);
     let cancel = CancellationToken::new();
+
+    // Phase status channel for setup/warmup/running progress
+    let (phase_tx, phase_rx) =
+        watch::channel(BenchPhase::Setup { completed: 0, total: cli.concurrency.get() as usize });
 
     // Create the clock in paused state - it will be resumed after all workers
     // complete setup and warmup, ensuring accurate timing for the main benchmark.
     let opts = cli.bench_opts(Clock::new_paused());
-    let runner = Runner::new(bench_suite, opts.clone(), res_tx, pause_rx, cancel.clone());
+    let runner = Runner::new(
+        bench_suite,
+        opts.clone(),
+        res_tx,
+        run_state_rx,
+        cancel.clone(),
+        phase_tx,
+    );
 
     let mut collector: Box<dyn ReportCollector> = match cli.collector() {
         Collector::Tui => Box::new(TuiCollector::new(
             opts,
             cli.fps,
             res_rx,
-            pause_tx,
+            run_state_tx,
             cancel,
             !cli.quit_manually,
+            phase_rx,
         )?),
         Collector::Silent => Box::new(SilentCollector::new(opts, res_rx, cancel)),
     };

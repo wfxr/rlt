@@ -55,6 +55,7 @@
 pub mod clock;
 mod duration;
 mod histogram;
+mod phase;
 mod report;
 mod runner;
 mod status;
@@ -68,6 +69,7 @@ pub mod collector;
 pub mod reporter;
 
 pub use crate::{
+    phase::{BenchPhase, RunState},
     report::BenchReport,
     report::IterReport,
     runner::BenchOpts,

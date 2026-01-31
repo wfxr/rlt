@@ -1,8 +1,10 @@
 use std::{fmt, time::Duration};
 
+use crate::phase::RunState;
+
 pub(super) struct TuiCollectorState {
     pub(super) tm_win: TimeWindowMode,
-    pub(super) finished: bool,
+    pub(super) run_state: RunState,
     #[cfg(feature = "tracing")]
     pub(super) log: super::tui_log::LogState,
 }
