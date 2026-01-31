@@ -57,6 +57,127 @@ pub struct BenchOpts {
     pub rate: Option<NonZeroU32>,
 }
 
+impl Default for BenchOpts {
+    fn default() -> Self {
+        Self {
+            clock: Clock::new_paused(),
+            concurrency: 1,
+            iterations: None,
+            duration: None,
+            warmups: 0,
+            #[cfg(feature = "rate_limit")]
+            rate: None,
+        }
+    }
+}
+
+impl BenchOpts {
+    /// Create a builder for [`BenchOpts`].
+    ///
+    /// This provides ergonomic construction without having to spell out all fields,
+    /// and it keeps feature-gated setters (e.g. `rate`) available even when the
+    /// corresponding feature is disabled.
+    ///
+    /// When the `rate_limit` feature is disabled, calling [`BenchOptsBuilder::rate`]
+    /// will cause [`BenchOptsBuilder::build`] to return an error.
+    pub fn builder() -> BenchOptsBuilder {
+        BenchOptsBuilder::default()
+    }
+}
+
+/// Builder for [`BenchOpts`].
+#[derive(Clone, Debug)]
+pub struct BenchOptsBuilder {
+    clock: Clock,
+    concurrency: u32,
+    iterations: Option<u64>,
+    duration: Option<Duration>,
+    warmups: u64,
+    rate: Option<u32>,
+}
+
+impl Default for BenchOptsBuilder {
+    fn default() -> Self {
+        Self {
+            clock: Clock::new_paused(),
+            concurrency: 1,
+            iterations: None,
+            duration: None,
+            warmups: 0,
+            rate: None,
+        }
+    }
+}
+
+impl BenchOptsBuilder {
+    /// Set the benchmark clock.
+    pub fn clock(mut self, clock: Clock) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    /// Set the number of concurrent workers.
+    pub fn concurrency(mut self, n: u32) -> Self {
+        self.concurrency = n;
+        self
+    }
+
+    /// Stop after running the given number of iterations.
+    pub fn iterations(mut self, n: u64) -> Self {
+        self.iterations = Some(n);
+        self
+    }
+
+    /// Stop after running for the given duration.
+    pub fn duration(mut self, d: Duration) -> Self {
+        self.duration = Some(d);
+        self
+    }
+
+    /// Set the number of warm-up iterations.
+    pub fn warmups(mut self, n: u64) -> Self {
+        self.warmups = n;
+        self
+    }
+
+    /// Set the rate limit in iterations per second (ips).
+    ///
+    /// When the `rate_limit` feature is disabled, [`build`](Self::build) will return an error.
+    pub fn rate(mut self, r: u32) -> Self {
+        self.rate = Some(r);
+        self
+    }
+
+    /// Build [`BenchOpts`].
+    pub fn build(self) -> Result<BenchOpts> {
+        anyhow::ensure!(self.concurrency > 0, "concurrency must be non-zero");
+
+        #[cfg(feature = "rate_limit")]
+        let rate = match self.rate {
+            None => None,
+            Some(r) => {
+                let r = NonZeroU32::new(r).ok_or_else(|| anyhow::anyhow!("rate must be non-zero"))?;
+                Some(r)
+            }
+        };
+
+        #[cfg(not(feature = "rate_limit"))]
+        if self.rate.is_some() {
+            anyhow::bail!("rate_limit feature is disabled; enable it to use BenchOptsBuilder::rate()")
+        }
+
+        Ok(BenchOpts {
+            clock: self.clock,
+            concurrency: self.concurrency,
+            iterations: self.iterations,
+            duration: self.duration,
+            warmups: self.warmups,
+            #[cfg(feature = "rate_limit")]
+            rate,
+        })
+    }
+}
+
 /// A trait for benchmark suites.
 #[async_trait]
 pub trait BenchSuite: Clone {
@@ -351,6 +472,52 @@ mod tests {
 
     use crate::{Status, clock::Clock, report::IterReport};
 
+    #[test]
+    fn test_bench_opts_default_values() {
+        let opts = BenchOpts::default();
+        assert_eq!(opts.concurrency, 1);
+        assert_eq!(opts.iterations, None);
+        assert_eq!(opts.duration, None);
+        assert_eq!(opts.warmups, 0);
+    }
+
+    #[test]
+    fn test_bench_opts_builder_sets_fields() {
+        let opts = BenchOpts::builder()
+            .concurrency(4)
+            .iterations(1000)
+            .duration(Duration::from_secs(3))
+            .warmups(10)
+            .build()
+            .unwrap();
+
+        assert_eq!(opts.concurrency, 4);
+        assert_eq!(opts.iterations, Some(1000));
+        assert_eq!(opts.duration, Some(Duration::from_secs(3)));
+        assert_eq!(opts.warmups, 10);
+    }
+
+    #[cfg(feature = "rate_limit")]
+    #[test]
+    fn test_bench_opts_builder_rate_conversion() {
+        let opts = BenchOpts::builder().rate(100).build().unwrap();
+        assert_eq!(opts.rate, NonZeroU32::new(100));
+    }
+
+    #[cfg(feature = "rate_limit")]
+    #[test]
+    fn test_bench_opts_builder_rate_zero_rejected() {
+        let err = BenchOpts::builder().rate(0).build().unwrap_err();
+        assert!(err.to_string().contains("rate must be non-zero"));
+    }
+
+    #[cfg(not(feature = "rate_limit"))]
+    #[test]
+    fn test_bench_opts_builder_rate_requires_feature() {
+        let err = BenchOpts::builder().rate(100).build().unwrap_err();
+        assert!(err.to_string().contains("rate_limit feature is disabled"));
+    }
+
     /// Execution phase for barrier synchronization testing
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Phase {
@@ -430,15 +597,12 @@ mod tests {
         let (phase_tx, _phase_rx) = watch::channel(BenchPhase::default());
         let cancel = CancellationToken::new();
 
-        let opts = BenchOpts {
-            clock: suite.clock.clone(),
-            concurrency,
-            iterations: Some(iterations),
-            duration: None,
-            warmups,
-            #[cfg(feature = "rate_limit")]
-            rate: None,
-        };
+        let opts = BenchOpts::builder()
+            .clock(suite.clock.clone())
+            .concurrency(concurrency)
+            .iterations(iterations)
+            .warmups(warmups)
+            .build()?;
 
         let runner = Runner::new(suite.clone(), opts, res_tx, run_state_rx, cancel, phase_tx);
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
@@ -511,15 +675,13 @@ mod tests {
         drop(phase_rx);
         let cancel = CancellationToken::new();
 
-        let opts = BenchOpts {
-            clock: suite.clock.clone(),
-            concurrency: 2,
-            iterations: Some(1),
-            duration: None,
-            warmups: 1,
-            #[cfg(feature = "rate_limit")]
-            rate: None,
-        };
+        let opts = BenchOpts::builder()
+            .clock(suite.clock.clone())
+            .concurrency(2)
+            .iterations(1)
+            .warmups(1)
+            .build()
+            .unwrap();
 
         let runner = Runner::new(suite.clone(), opts, res_tx, run_state_rx, cancel, phase_tx);
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
@@ -581,15 +743,13 @@ mod tests {
         let (phase_tx, mut phase_rx) = watch::channel(BenchPhase::default());
         let cancel = CancellationToken::new();
 
-        let opts = BenchOpts {
-            clock: clock.clone(),
-            concurrency: 2,
-            iterations: Some(2),
-            duration: None,
-            warmups,
-            #[cfg(feature = "rate_limit")]
-            rate: None,
-        };
+        let opts = BenchOpts::builder()
+            .clock(clock.clone())
+            .concurrency(2)
+            .iterations(2)
+            .warmups(warmups)
+            .build()
+            .unwrap();
 
         let runner = Runner::new(suite, opts, res_tx, run_state_rx, cancel, phase_tx);
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });

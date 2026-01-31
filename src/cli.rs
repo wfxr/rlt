@@ -231,6 +231,7 @@ pub struct BenchCli {
 
 impl BenchCli {
     pub(crate) fn bench_opts(&self, clock: Clock) -> BenchOpts {
+        // Keep an explicit struct literal here so adding a new BenchOpts field forces an update at compile time.
         BenchOpts {
             clock,
             concurrency: self.concurrency.get(),
