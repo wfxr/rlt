@@ -73,6 +73,7 @@ pub use crate::{
     report::BenchReport,
     report::IterReport,
     runner::BenchOpts,
+    runner::BenchOptsBuilder,
     runner::IterInfo,
     runner::{BenchSuite, StatelessBenchSuite},
     status::{Status, StatusKind},
