@@ -26,7 +26,6 @@ use crate::{
     clock::Clock,
     error::{BenchResult, ConfigError, Error, Result},
     phase::{BenchPhase, PauseControl},
-    // rate_limiter::{self, RateLimiter},
     report::IterReport,
 };
 
