@@ -32,7 +32,7 @@ mod tui_log;
 use anyhow::Result;
 use async_trait::async_trait;
 use nonzero_ext::nonzero;
-use std::{collections::HashMap, num::NonZeroU8, time::Duration};
+use std::{collections::HashMap, num::NonZeroU8, sync::Arc, time::Duration};
 use tokio::{
     sync::{mpsc, watch},
     time::MissedTickBehavior,
@@ -45,7 +45,7 @@ use terminal::Terminal;
 use crate::{
     collector::ReportCollector,
     histogram::LatencyHistogram,
-    phase::{BenchPhase, RunState},
+    phase::{BenchPhase, PauseControl, RunState},
     report::{BenchReport, IterReport},
     runner::BenchOpts,
     stats::{IterStats, MultiScaleStatsWindow, RecentStatsWindow},
@@ -78,8 +78,8 @@ pub struct TuiCollector {
     pub(crate) fps: NonZeroU8,
     /// Channel receiver for iteration reports from workers.
     pub(crate) res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
-    /// Watch channel sender for run state control (pause/resume/finished).
-    pub(crate) run_state_tx: watch::Sender<RunState>,
+    /// Pause control shared with the runner.
+    pub(crate) pause: Arc<PauseControl>,
     /// Cancellation token for graceful shutdown.
     pub(crate) cancel: CancellationToken,
     /// Whether to exit automatically when the benchmark finishes.
@@ -97,7 +97,7 @@ impl TuiCollector {
         bench_opts: BenchOpts,
         fps: NonZeroU8,
         res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
-        run_state_tx: watch::Sender<RunState>,
+        pause: Arc<PauseControl>,
         cancel: CancellationToken,
         auto_quit: bool,
         phase_rx: watch::Receiver<BenchPhase>,
@@ -112,7 +112,7 @@ impl TuiCollector {
             bench_opts,
             fps,
             res_rx,
-            run_state_tx,
+            pause,
             cancel,
             auto_quit,
             phase_rx,
@@ -188,7 +188,6 @@ impl TuiCollector {
                             None => {
                                 clock.pause();
                                 self.state.run_state = RunState::Finished;
-                                self.run_state_tx.send_replace(RunState::Finished);
                                 break;
                             }
                         }

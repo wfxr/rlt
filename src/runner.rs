@@ -25,7 +25,7 @@ cfg_if::cfg_if! {
 
 use crate::{
     clock::Clock,
-    phase::{BenchPhase, RunState},
+    phase::{BenchPhase, PauseControl},
     // rate_limiter::{self, RateLimiter},
     report::IterReport,
 };
@@ -230,7 +230,7 @@ where
     suite: BS,
     opts: BenchOpts,
     res_tx: mpsc::UnboundedSender<Result<IterReport>>,
-    run_state_rx: watch::Receiver<RunState>,
+    pause: Arc<PauseControl>,
     cancel: CancellationToken,
     seq: Arc<AtomicU64>,
     phase_tx: watch::Sender<BenchPhase>,
@@ -266,7 +266,7 @@ where
         suite: BS,
         opts: BenchOpts,
         res_tx: mpsc::UnboundedSender<Result<IterReport>>,
-        run_state_rx: watch::Receiver<RunState>,
+        pause: Arc<PauseControl>,
         cancel: CancellationToken,
         phase_tx: watch::Sender<BenchPhase>,
     ) -> Self {
@@ -274,7 +274,7 @@ where
             suite,
             opts,
             res_tx,
-            run_state_rx,
+            pause,
             cancel,
             seq: Arc::default(),
             phase_tx,
@@ -282,7 +282,7 @@ where
     }
 
     async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) -> Result<IterReport> {
-        self.wait_if_paused().await;
+        self.pause.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
 
         #[cfg(feature = "tracing")]
@@ -385,7 +385,7 @@ where
 
                     // Only start the clock once the benchmark phase begins AND we're not paused.
                     // When paused, the clock must not advance (e.g. duration mode should not count down).
-                    if *b.run_state_rx.borrow() != RunState::Paused {
+                    if !b.pause.is_paused() {
                         b.opts.clock.resume();
                     }
                 }
@@ -446,14 +446,6 @@ where
 
         join_all(&mut set).await
     }
-
-    async fn wait_if_paused(&mut self) {
-        while *self.run_state_rx.borrow() == RunState::Paused {
-            if self.run_state_rx.changed().await.is_err() {
-                return;
-            }
-        }
-    }
 }
 
 async fn join_all(set: &mut JoinSet<Result<()>>) -> Result<()> {
@@ -466,6 +458,7 @@ async fn join_all(set: &mut JoinSet<Result<()>>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
     use std::sync::Mutex;
     use std::sync::atomic::AtomicBool;
     use std::time::Instant;
@@ -516,6 +509,80 @@ mod tests {
     fn test_bench_opts_builder_rate_requires_feature() {
         let err = BenchOpts::builder().rate(100).build().unwrap_err();
         assert!(err.to_string().contains("rate_limit feature is disabled"));
+    }
+
+    #[test]
+    #[ignore]
+    fn perf_pause_hotpath_throughput() {
+        #[derive(Clone)]
+        struct EmptyBench;
+
+        #[async_trait]
+        impl StatelessBenchSuite for EmptyBench {
+            async fn bench(&mut self, _: &IterInfo) -> Result<IterReport> {
+                Ok(IterReport {
+                    duration: Duration::ZERO,
+                    status: Status::success(0),
+                    bytes: 0,
+                    items: 0,
+                })
+            }
+        }
+
+        let concurrency: u32 = env::var("RLT_PERF_CONCURRENCY")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(32);
+
+        let iterations: u64 = env::var("RLT_PERF_ITERS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(20_000_000);
+
+        let threads: usize = env::var("RLT_PERF_THREADS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1));
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_time()
+            .worker_threads(threads)
+            .build()
+            .unwrap();
+
+        rt.block_on(async move {
+            let (res_tx, res_rx) = mpsc::unbounded_channel::<Result<IterReport>>();
+            drop(res_rx);
+
+            let pause = Arc::new(PauseControl::new());
+            let (phase_tx, phase_rx) = watch::channel(BenchPhase::default());
+            drop(phase_rx);
+
+            let cancel = CancellationToken::new();
+            let opts = BenchOpts::builder()
+                .clock(Clock::new_paused())
+                .concurrency(concurrency)
+                .iterations(iterations)
+                .warmups(0)
+                .build()
+                .unwrap();
+
+            let runner = Runner::new(EmptyBench, opts, res_tx, pause, cancel, phase_tx);
+
+            let t0 = Instant::now();
+            runner.run().await.unwrap();
+            let elapsed = t0.elapsed();
+
+            let iters_per_sec = iterations as f64 / elapsed.as_secs_f64();
+            eprintln!(
+                "perf_pause_hotpath_throughput pause_impl=pause_control concurrency={} iterations={} threads={} elapsed={:?} iters/sec={:.0}",
+                concurrency,
+                iterations,
+                threads,
+                elapsed,
+                iters_per_sec
+            );
+        });
     }
 
     /// Execution phase for barrier synchronization testing
@@ -593,7 +660,7 @@ mod tests {
 
     async fn run_benchmark(suite: &TrackedSuite, concurrency: u32, warmups: u64, iterations: u64) -> Result<()> {
         let (res_tx, mut res_rx) = mpsc::unbounded_channel();
-        let (_run_state_tx, run_state_rx) = watch::channel(RunState::Running);
+        let pause = Arc::new(PauseControl::new());
         let (phase_tx, _phase_rx) = watch::channel(BenchPhase::default());
         let cancel = CancellationToken::new();
 
@@ -604,7 +671,7 @@ mod tests {
             .warmups(warmups)
             .build()?;
 
-        let runner = Runner::new(suite.clone(), opts, res_tx, run_state_rx, cancel, phase_tx);
+        let runner = Runner::new(suite.clone(), opts, res_tx, pause, cancel, phase_tx);
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
 
         runner.run().await?;
@@ -670,7 +737,7 @@ mod tests {
     async fn test_phase_updates_are_best_effort_when_receiver_is_dropped() {
         let suite = TrackedSuite::new(0, Clock::new_paused());
         let (res_tx, mut res_rx) = mpsc::unbounded_channel();
-        let (_run_state_tx, run_state_rx) = watch::channel(RunState::Running);
+        let pause = Arc::new(PauseControl::new());
         let (phase_tx, phase_rx) = watch::channel(BenchPhase::default());
         drop(phase_rx);
         let cancel = CancellationToken::new();
@@ -683,7 +750,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let runner = Runner::new(suite.clone(), opts, res_tx, run_state_rx, cancel, phase_tx);
+        let runner = Runner::new(suite.clone(), opts, res_tx, pause, cancel, phase_tx);
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
 
         runner.run().await.unwrap();
@@ -739,7 +806,7 @@ mod tests {
         };
 
         let (res_tx, mut res_rx) = mpsc::unbounded_channel();
-        let (run_state_tx, run_state_rx) = watch::channel(RunState::Running);
+        let pause = Arc::new(PauseControl::new());
         let (phase_tx, mut phase_rx) = watch::channel(BenchPhase::default());
         let cancel = CancellationToken::new();
 
@@ -751,13 +818,13 @@ mod tests {
             .build()
             .unwrap();
 
-        let runner = Runner::new(suite, opts, res_tx, run_state_rx, cancel, phase_tx);
+        let runner = Runner::new(suite, opts, res_tx, pause.clone(), cancel, phase_tx);
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
         let handle = tokio::spawn(async move { runner.run().await });
 
         // Pause while the last warmup iteration is still running, so the transition to Bench happens under Paused.
         last_warmup_started.notified().await;
-        run_state_tx.send_replace(RunState::Paused);
+        pause.pause();
 
         // Wait for the Bench transition.
         loop {
@@ -771,7 +838,7 @@ mod tests {
 
         // Simulate TUI: resume clock + unpause once bench phase is reached.
         clock.resume();
-        run_state_tx.send_replace(RunState::Running);
+        pause.resume();
 
         handle.await.unwrap().unwrap();
         drop(drain);
