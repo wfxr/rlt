@@ -1,12 +1,11 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
-use crate::error::TuiError;
-use crate::phase::{BenchPhase, RunState};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
 use super::TuiResult;
-
 use super::state::TimeWindowMode;
+use crate::error::TuiError;
+use crate::phase::{BenchPhase, RunState};
 
 impl super::TuiCollector {
     /// Handle the user input events. Returns `true` if the collector should quit.

@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{BenchResult, BenchSuite, IterInfo, IterReport, Result, Status, bench_cli, bench_cli_run};
+use rlt::{
+    BenchResult, BenchSuite, IterInfo, IterReport, Result, Status, bench_cli, bench_cli_run,
+};
 use tokio::time::Instant;
 use tokio_postgres::{Client, NoTls};
 
@@ -54,14 +56,16 @@ impl BenchSuite for DBBench {
         });
 
         client.execute("BEGIN", &[]).await?;
-        client
-            .execute("CREATE TABLE t(id SERIAL PRIMARY KEY, name TEXT)", &[])
-            .await?;
+        client.execute("CREATE TABLE t(id SERIAL PRIMARY KEY, name TEXT)", &[]).await?;
 
         Ok(client)
     }
 
-    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> BenchResult<IterReport> {
+    async fn bench(
+        &mut self,
+        client: &mut Self::WorkerState,
+        _: &IterInfo,
+    ) -> BenchResult<IterReport> {
         let t = Instant::now();
         client
             .query(

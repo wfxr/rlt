@@ -1,9 +1,11 @@
+use std::io;
+
 use crossterm::{ExecutableCommand, cursor, terminal};
+use ratatui::backend::CrosstermBackend;
+use ratatui::{CompletedFrame, Frame};
 
 use super::TuiResult;
 use crate::error::TuiError;
-use ratatui::{CompletedFrame, Frame, backend::CrosstermBackend};
-use std::io;
 
 /// Best-effort terminal restoration; errors are ignored since we may
 /// already be in an error path and terminal state is uncertain.

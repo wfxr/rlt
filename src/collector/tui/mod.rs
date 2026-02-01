@@ -29,29 +29,28 @@ mod terminal;
 #[cfg(feature = "tracing")]
 mod tui_log;
 
+use std::collections::HashMap;
+use std::num::NonZeroU8;
+use std::sync::Arc;
+use std::time::Duration;
+
 use async_trait::async_trait;
 use nonzero_ext::nonzero;
-use std::{collections::HashMap, num::NonZeroU8, sync::Arc, time::Duration};
-use tokio::{
-    sync::{mpsc, watch},
-    time::MissedTickBehavior,
-};
-use tokio_util::sync::CancellationToken;
-
 use state::{TimeWindow, TimeWindowMode, TuiCollectorState};
 use terminal::Terminal;
+use tokio::sync::{mpsc, watch};
+use tokio::time::MissedTickBehavior;
+use tokio_util::sync::CancellationToken;
 
-use crate::{
-    BenchResult, Result,
-    collector::ReportCollector,
-    error::TuiError,
-    histogram::LatencyHistogram,
-    phase::{BenchPhase, PauseControl, RunState},
-    report::{BenchReport, IterReport},
-    runner::BenchOpts,
-    stats::{IterStats, MultiScaleStatsWindow, RecentStatsWindow},
-    status::Status,
-};
+use crate::collector::ReportCollector;
+use crate::error::TuiError;
+use crate::histogram::LatencyHistogram;
+use crate::phase::{BenchPhase, PauseControl, RunState};
+use crate::report::{BenchReport, IterReport};
+use crate::runner::BenchOpts;
+use crate::stats::{IterStats, MultiScaleStatsWindow, RecentStatsWindow};
+use crate::status::Status;
+use crate::{BenchResult, Result};
 
 type TuiResult<T> = std::result::Result<T, TuiError>;
 
@@ -111,16 +110,7 @@ impl TuiCollector {
             #[cfg(feature = "tracing")]
             log: tui_log::LogState::from_env(),
         };
-        Ok(Self {
-            bench_opts,
-            fps,
-            res_rx,
-            pause,
-            cancel,
-            auto_quit,
-            phase_rx,
-            state,
-        })
+        Ok(Self { bench_opts, fps, res_rx, pause, cancel, auto_quit, phase_rx, state })
     }
 }
 
@@ -132,8 +122,7 @@ impl ReportCollector for TuiCollector {
         let mut status_dist = HashMap::new();
         let mut error_dist = HashMap::new();
 
-        self.collect(&mut hist, &mut stats, &mut status_dist, &mut error_dist)
-            .await?;
+        self.collect(&mut hist, &mut stats, &mut status_dist, &mut error_dist).await?;
 
         let elapsed = self.bench_opts.clock.elapsed();
         let concurrency = self.bench_opts.concurrency;
@@ -152,7 +141,8 @@ impl TuiCollector {
         let clock = self.bench_opts.clock.clone();
         let mut terminal = Terminal::new()?;
 
-        let mut latest_iters = MultiScaleStatsWindow::new(nonzero!(60usize), TimeWindow::variants().iter().copied())?;
+        let mut latest_iters =
+            MultiScaleStatsWindow::new(nonzero!(60usize), TimeWindow::variants().iter().copied())?;
         let mut latest_iters_ticker = clock.ticker(SECOND);
 
         let mut recent_stats = RecentStatsWindow::new(self.fps.into());

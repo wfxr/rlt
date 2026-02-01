@@ -1,13 +1,9 @@
-edition = "2024"
-max_width = 120
-reorder_imports = true
-struct_lit_width = 60
-struct_variant_width = 60
+# Ported from https://github.com/rust-lang/rust/blob/main/rustfmt.toml
+# Run rustfmt with: cargo +nightly fmt
 
-# struct_field_align_threshold = 40
-# comment_width = 120
-# fn_single_line = false
-# imports_layout = "HorizontalVertical"
-# match_arm_blocks = false
-# overflow_delimited_expr = true
-# imports_granularity = "Crate"
+style_edition = "2024"
+use_small_heuristics = "Max"
+merge_derives = false
+group_imports = "StdExternalCrate"
+imports_granularity = "Module"
+use_field_init_shorthand = true

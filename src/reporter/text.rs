@@ -20,28 +20,24 @@
 //! - Red: Errors, regressions
 //! - Cyan: Labels, informational text
 
+use std::cmp::Reverse;
+use std::collections::HashMap;
+use std::io::Write;
+
 use crossterm::style::{StyledContent, Stylize};
 use itertools::Itertools;
-use std::{cmp::Reverse, collections::HashMap, io::Write};
-use tabled::settings::Padding;
-use tabled::settings::PaddingColor;
+use tabled::builder::Builder;
 use tabled::settings::object::{Cell, Columns, FirstColumn, FirstRow, LastColumn, Object, Rows};
-use tabled::{
-    builder::Builder,
-    settings::{Alignment, Color, Margin, Style, themes::Colorization},
-};
-
-use crate::baseline::{Comparison, Delta, DeltaStatus, LatencyDeltas, RegressionMetric, Verdict};
-use crate::duration::TimeUnit;
-use crate::{
-    duration::{DurationExt, FormattedDuration},
-    histogram::{LatencyHistogram, PERCENTAGES},
-    report::BenchReport,
-    status::{Status, StatusKind},
-    util::{HumanBytes, rate},
-};
+use tabled::settings::themes::Colorization;
+use tabled::settings::{Alignment, Color, Margin, Padding, PaddingColor, Style};
 
 use super::ReporterResult;
+use crate::baseline::{Comparison, Delta, DeltaStatus, LatencyDeltas, RegressionMetric, Verdict};
+use crate::duration::{DurationExt, FormattedDuration, TimeUnit};
+use crate::histogram::{LatencyHistogram, PERCENTAGES};
+use crate::report::BenchReport;
+use crate::status::{Status, StatusKind};
+use crate::util::{HumanBytes, rate};
 
 /// A text reporter that outputs human-readable, colored benchmark results.
 ///
@@ -59,7 +55,12 @@ use super::ReporterResult;
 pub struct TextReporter;
 
 impl super::BenchReporter for TextReporter {
-    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> ReporterResult<()> {
+    fn print(
+        &self,
+        w: &mut dyn Write,
+        report: &BenchReport,
+        comparison: Option<&Comparison>,
+    ) -> ReporterResult<()> {
         print_summary(w, report)?;
 
         if report.stats.overall.iters > 0 {
@@ -113,9 +114,9 @@ fn print_latency_histogram(
     }
 
     let &max_count = quantiles.iter().map(|(_, count)| count).max().unwrap();
-    let quantiles = quantiles
-        .into_iter()
-        .map(|(latency, count)| vec![count.to_string(), latency, "🭵".into(), render_bar(count, max_count)]);
+    let quantiles = quantiles.into_iter().map(|(latency, count)| {
+        vec![count.to_string(), latency, "🭵".into(), render_bar(count, max_count)]
+    });
     let mut quantiles = Builder::from_iter(quantiles).build();
     quantiles
         .with(Style::empty())
@@ -213,7 +214,11 @@ fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram) -> ReporterResult<(
     Ok(())
 }
 
-fn print_latency_stats(w: &mut dyn Write, hist: &LatencyHistogram, u: TimeUnit) -> ReporterResult<()> {
+fn print_latency_stats(
+    w: &mut dyn Write,
+    hist: &LatencyHistogram,
+    u: TimeUnit,
+) -> ReporterResult<()> {
     let stats = vec![
         vec!["Avg".into(), "Min".into(), "Med".into(), "Max".into(), "Stdev".into()],
         vec![
@@ -240,13 +245,13 @@ fn print_latency_stats(w: &mut dyn Write, hist: &LatencyHistogram, u: TimeUnit) 
     Ok(())
 }
 
-fn print_latency_percentiles(w: &mut dyn Write, hist: &LatencyHistogram, u: TimeUnit) -> ReporterResult<()> {
+fn print_latency_percentiles(
+    w: &mut dyn Write,
+    hist: &LatencyHistogram,
+    u: TimeUnit,
+) -> ReporterResult<()> {
     let percentiles = hist.percentiles(PERCENTAGES).map(|(p, v)| {
-        vec![
-            format!("{:.2}%", p),
-            format!(" in "),
-            format!("{:.2}", FormattedDuration::from(v, u)),
-        ]
+        vec![format!("{:.2}%", p), format!(" in "), format!("{:.2}", FormattedDuration::from(v, u))]
     });
     let mut percentiles = Builder::from_iter(percentiles).build();
     percentiles
@@ -262,10 +267,7 @@ fn print_latency_percentiles(w: &mut dyn Write, hist: &LatencyHistogram, u: Time
 }
 
 fn print_status(w: &mut dyn Write, status: &HashMap<Status, u64>) -> ReporterResult<()> {
-    let status_v = status
-        .iter()
-        .sorted_unstable_by_key(|&(_, cnt)| Reverse(cnt))
-        .collect_vec();
+    let status_v = status.iter().sorted_unstable_by_key(|&(_, cnt)| Reverse(cnt)).collect_vec();
     writeln!(w, "{}", "Status Distribution".h1())?;
     if !status_v.is_empty() {
         let max = status_v.iter().map(|(_, iters)| iters).max().unwrap();
@@ -286,11 +288,8 @@ fn print_status(w: &mut dyn Write, status: &HashMap<Status, u64>) -> ReporterRes
 }
 
 fn print_error(w: &mut dyn Write, report: &BenchReport) -> ReporterResult<()> {
-    let error_v = report
-        .error_dist
-        .iter()
-        .sorted_unstable_by_key(|&(_, cnt)| Reverse(cnt))
-        .collect_vec();
+    let error_v =
+        report.error_dist.iter().sorted_unstable_by_key(|&(_, cnt)| Reverse(cnt)).collect_vec();
     let max = error_v.iter().map(|(_, iters)| iters).max().unwrap();
     let iters_width = max.to_string().len();
     writeln!(w, "{}", "Error Distribution".h1())?;
@@ -354,7 +353,11 @@ fn format_metric_name(
     format!("{}{}", prefix, metric.display_name())
 }
 
-fn print_baseline_comparison(w: &mut dyn Write, cmp: &Comparison, u: TimeUnit) -> ReporterResult<()> {
+fn print_baseline_comparison(
+    w: &mut dyn Write,
+    cmp: &Comparison,
+    u: TimeUnit,
+) -> ReporterResult<()> {
     writeln!(w, "{}", "Baseline Comparison".h1())?;
 
     // Summary line
@@ -394,10 +397,8 @@ fn print_baseline_comparison(w: &mut dyn Write, cmp: &Comparison, u: TimeUnit) -
     // Skipped metrics warning (if any)
     if !cmp.skipped_metrics.is_empty() {
         let skipped = cmp.skipped_metrics.iter().map(|m| m.display_name()).join(", ");
-        let msg = format!(
-            "Note: Some metrics for verdict calculation were unavailable: {}",
-            skipped
-        );
+        let msg =
+            format!("Note: Some metrics for verdict calculation were unavailable: {}", skipped);
         writeln!(w, "  {}", msg.dim().italic())?;
         writeln!(w)?;
     }

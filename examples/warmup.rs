@@ -1,11 +1,10 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status, cli::BenchCli};
+use rlt::cli::BenchCli;
+use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status};
 use tokio::time::{Duration, Instant};
 
 /// Demonstration of warmup functionality.

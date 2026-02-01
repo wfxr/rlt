@@ -24,7 +24,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status, cli::BenchCli};
+use rlt::cli::BenchCli;
+use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status};
 use tokio::time::Instant;
 
 #[derive(Parser, Clone)]
@@ -57,12 +58,7 @@ impl StatelessBenchSuite for BaselineDemo {
 
         let duration = t.elapsed();
 
-        Ok(IterReport {
-            duration,
-            status: Status::success(200),
-            bytes: 1024,
-            items: 1,
-        })
+        Ok(IterReport { duration, status: Status::success(200), bytes: 1024, items: 1 })
     }
 }
 

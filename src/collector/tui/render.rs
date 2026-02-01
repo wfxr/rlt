@@ -1,24 +1,21 @@
-use itertools::Itertools;
-use ratatui::{
-    Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Style, Stylize},
-    text::Line,
-    widgets::{BarChart, Block, Borders, Clear, Gauge, Padding, Paragraph},
-};
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
+use std::time::Duration;
 
-use crate::{
-    duration::DurationExt,
-    histogram::{LatencyHistogram, PERCENTAGES},
-    phase::{BenchPhase, RunState},
-    runner::BenchOpts,
-    stats::{Counter, MultiScaleStatsWindow, RecentStatsWindow},
-    status::{Status, StatusKind},
-    util::HumanBytes,
-};
+use itertools::Itertools;
+use ratatui::Frame;
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
+use ratatui::style::{Color, Style, Stylize};
+use ratatui::text::Line;
+use ratatui::widgets::{BarChart, Block, Borders, Clear, Gauge, Padding, Paragraph};
 
 use super::state::TimeWindow;
+use crate::duration::DurationExt;
+use crate::histogram::{LatencyHistogram, PERCENTAGES};
+use crate::phase::{BenchPhase, RunState};
+use crate::runner::BenchOpts;
+use crate::stats::{Counter, MultiScaleStatsWindow, RecentStatsWindow};
+use crate::status::{Status, StatusKind};
+use crate::util::HumanBytes;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn render_dashboard(
@@ -90,11 +87,17 @@ fn render_stats_overall(frame: &mut Frame, area: Rect, counter: &Counter, elapse
     render_stats(frame, area, "Stats overall".into(), counter, elapsed);
 }
 
-fn render_stats(frame: &mut Frame, area: Rect, title: Line<'_>, counter: &Counter, elapsed: Duration) {
+fn render_stats(
+    frame: &mut Frame,
+    area: Rect,
+    title: Line<'_>,
+    counter: &Counter,
+    elapsed: Duration,
+) {
     let block = Block::new().title(title).borders(Borders::ALL);
 
-    let [lhs, rhs] =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(block.inner(area));
+    let [lhs, rhs] = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .areas(block.inner(area));
 
     let stats_counter = render_stats_counter(counter);
     let stats_rate = render_stats_rate(counter, elapsed);
@@ -138,14 +141,17 @@ fn render_process_gauge(
         };
     }
 
-    let rounded = |duration: Duration| humantime::Duration::from(Duration::from_secs(duration.as_secs_f64() as u64));
+    let rounded = |duration: Duration| {
+        humantime::Duration::from(Duration::from_secs(duration.as_secs_f64() as u64))
+    };
     let time_progress = |duration: &Duration| {
         (
             ratio!(elapsed.as_secs_f64(), duration.as_secs_f64()),
             format!("{} / {}", rounded(elapsed), rounded(*duration)),
         )
     };
-    let iter_progress = |iters: &u64| (ratio!(counter.iters, *iters), format!("{} / {}", counter.iters, iters));
+    let iter_progress =
+        |iters: &u64| (ratio!(counter.iters, *iters), format!("{} / {}", counter.iters, iters));
 
     // Handle phase-specific progress display
     let (progress, mut label) = match phase {
@@ -159,7 +165,9 @@ fn render_process_gauge(
         BenchPhase::Bench => {
             let (progress, label) = match opts {
                 BenchOpts { duration: None, iterations: None, .. } => (0.0, "INFINITE".to_string()),
-                BenchOpts { duration: Some(duration), iterations: None, .. } => time_progress(duration),
+                BenchOpts { duration: Some(duration), iterations: None, .. } => {
+                    time_progress(duration)
+                }
                 BenchOpts { duration: None, iterations: Some(iters), .. } => iter_progress(iters),
                 BenchOpts { duration: Some(duration), iterations: Some(iters), .. } => {
                     let iter_ratio = ratio!(counter.iters, *iters);
@@ -214,7 +222,8 @@ fn render_status_dist(frame: &mut Frame, area: Rect, status_dist: &HashMap<Statu
             Line::from(s)
         })
         .collect_vec();
-    let p = Paragraph::new(dist).block(Block::new().title("Status distribution").borders(Borders::ALL));
+    let p =
+        Paragraph::new(dist).block(Block::new().title("Status distribution").borders(Borders::ALL));
     frame.render_widget(p, area);
 }
 
@@ -228,14 +237,14 @@ fn render_error_dist(frame: &mut Frame, area: Rect, error_dist: &HashMap<String,
         .sorted_by_key(|&(_, cnt)| std::cmp::Reverse(cnt))
         .map(|(err, cnt)| Line::from(format!("[{cnt}] {err}")))
         .collect_vec();
-    let p = Paragraph::new(dist).block(Block::new().title("Error distribution").borders(Borders::ALL));
+    let p =
+        Paragraph::new(dist).block(Block::new().title("Error distribution").borders(Borders::ALL));
     frame.render_widget(p, area);
 }
 
 fn render_iter_hist(frame: &mut Frame, area: Rect, win: &MultiScaleStatsWindow, tw: TimeWindow) {
-    let win = win
-        .window_for_secs(tw as usize)
-        .expect("MultiScaleStatsWindow missing TimeWindow period");
+    let win =
+        win.window_for_secs(tw as usize).expect("MultiScaleStatsWindow missing TimeWindow period");
     let cols = win.iter().map(|w| w.iters.to_string().len()).max().unwrap_or(0);
     let data = win
         .iter()
@@ -252,12 +261,8 @@ fn render_iter_hist(frame: &mut Frame, area: Rect, win: &MultiScaleStatsWindow, 
         .collect_vec();
 
     let bar_num_iter_str = data.iter().map(|(a, b)| (a.as_str(), *b)).collect_vec();
-    let bar_width = data
-        .iter()
-        .map(|(s, _)| s.chars().count())
-        .max()
-        .map(|w| w + 2)
-        .unwrap_or(1) as u16;
+    let bar_width =
+        data.iter().map(|(s, _)| s.chars().count()).max().map(|w| w + 2).unwrap_or(1) as u16;
     let chart = BarChart::default()
         .block(Block::new().title("Iteration histogram").borders(Borders::ALL))
         .data(bar_num_iter_str.as_slice())
@@ -271,10 +276,7 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
     // time unit for the histogram
     let u = hist.median().appropriate_unit();
 
-    let quantiles = hist
-        .quantiles()
-        .map(|(d, n)| (d.as_f64(u).to_string(), n))
-        .collect_vec();
+    let quantiles = hist.quantiles().map(|(d, n)| (d.as_f64(u).to_string(), n)).collect_vec();
 
     let data = quantiles.iter().map(|(d, n)| (d.as_str(), *n)).collect_vec();
     let chart = BarChart::default()
@@ -298,8 +300,10 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
     }
 
     let area = area.inner(Margin::new(1, 1));
-    let area = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
-    let area = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area[1]);
+    let area =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
+    let area =
+        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area[1]);
     let area = area[0];
 
     // max width of the formatted duration
@@ -315,10 +319,7 @@ fn render_latency_hist(frame: &mut Frame, area: Rect, hist: &LatencyHistogram, h
     content.push(Line::default());
 
     content.extend(hist.percentiles(PERCENTAGES).map(|(p, d)| {
-        Line::from(vec![
-            format!("P{:.2}%: ", p).cyan(),
-            format!("{: >w$.2}", d.as_f64(u)).green(),
-        ])
+        Line::from(vec![format!("P{:.2}%: ", p).cyan(), format!("{: >w$.2}", d.as_f64(u)).green()])
     }));
     let width = content.iter().map(|s| s.width()).max().unwrap_or(0) + 2;
     if width > area.width as usize {

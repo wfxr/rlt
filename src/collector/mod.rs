@@ -29,7 +29,6 @@ mod silent;
 mod tui;
 
 use async_trait::async_trait;
-
 pub use silent::SilentCollector;
 pub use tui::TuiCollector;
 

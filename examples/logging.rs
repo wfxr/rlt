@@ -1,9 +1,11 @@
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status, StatusKind, cli::BenchCli};
+use rlt::cli::BenchCli;
+use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status, StatusKind};
 use tokio::time::{Duration, Instant};
-
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Clone)]
 struct SimpleBench;
@@ -28,7 +30,9 @@ impl StatelessBenchSuite for SimpleBench {
         match status.kind() {
             StatusKind::Success => tracing::info!(?status, seq),
             StatusKind::ClientError => tracing::warn!(?status, seq),
-            StatusKind::ServerError | StatusKind::Error => tracing::error!(?status, seq),
+            StatusKind::ServerError | StatusKind::Error => {
+                tracing::error!(?status, seq)
+            }
         };
 
         Ok(IterReport { duration, status, bytes: 0, items: 1 })
@@ -46,9 +50,7 @@ async fn main() -> Result<()> {
                 .init();
         }
         rlt::cli::Collector::Silent => {
-            tracing_subscriber::fmt()
-                .with_env_filter(EnvFilter::from_default_env())
-                .init();
+            tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
         }
     }
 

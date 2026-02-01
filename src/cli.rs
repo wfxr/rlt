@@ -54,34 +54,26 @@
 //!
 //! Run `mybench --help` to see all available options including baseline comparison,
 //! noise threshold, regression metrics, and TUI settings.
-use std::{
-    fs::File,
-    io::stdout,
-    num::{NonZeroU8, NonZeroU32, NonZeroU64},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::fs::File;
+use std::io::stdout;
+use std::num::{NonZeroU8, NonZeroU32, NonZeroU64};
+use std::path::PathBuf;
+use std::sync::Arc;
 
-use clap::{
-    ArgGroup, Parser, ValueEnum,
-    builder::{
-        Styles,
-        styling::{AnsiColor, Effects},
-    },
-};
+use clap::builder::Styles;
+use clap::builder::styling::{AnsiColor, Effects};
+use clap::{ArgGroup, Parser, ValueEnum};
 use crossterm::tty::IsTty;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    baseline::{self, BaselineName, RegressionMetric, Verdict},
-    clock::Clock,
-    collector::{ReportCollector, SilentCollector, TuiCollector},
-    error::ReporterError,
-    phase::{BenchPhase, PauseControl},
-    reporter::{BenchReporter, JsonReporter, TextReporter},
-    runner::{BenchOpts, BenchSuite, Runner},
-};
+use crate::baseline::{self, BaselineName, RegressionMetric, Verdict};
+use crate::clock::Clock;
+use crate::collector::{ReportCollector, SilentCollector, TuiCollector};
+use crate::error::ReporterError;
+use crate::phase::{BenchPhase, PauseControl};
+use crate::reporter::{BenchReporter, JsonReporter, TextReporter};
+use crate::runner::{BenchOpts, BenchSuite, Runner};
 
 /// Default regression metrics for baseline comparison.
 const DEFAULT_REGRESSION_METRICS: &[RegressionMetric] = &[
@@ -291,14 +283,8 @@ where
     // Create the clock in paused state - it will be resumed after all workers
     // complete setup and warmup, ensuring accurate timing for the main benchmark.
     let opts = cli.bench_opts(Clock::new_paused());
-    let runner = Runner::new(
-        bench_suite,
-        opts.clone(),
-        res_tx,
-        pause.clone(),
-        cancel.clone(),
-        phase_tx,
-    );
+    let runner =
+        Runner::new(bench_suite, opts.clone(), res_tx, pause.clone(), cancel.clone(), phase_tx);
 
     let mut collector: Box<dyn ReportCollector> = match cli.collector() {
         Collector::Tui => Box::new(TuiCollector::new(
@@ -320,13 +306,15 @@ where
     let report = report.await??;
 
     // Compute comparison using pre-loaded baseline
-    let cmp = baseline.map(|b| baseline::compare(&report, &b, cli.noise_threshold, &cli.regression_metrics));
+    let cmp = baseline
+        .map(|b| baseline::compare(&report, &b, cli.noise_threshold, &cli.regression_metrics));
 
     // Print report with comparison
     let mut output: Box<dyn std::io::Write> = match &cli.output_file {
-        Some(path) => {
-            Box::new(File::create(path).map_err(|e| ReporterError::CreateOutputFile { path: path.clone(), source: e })?)
-        }
+        Some(path) => Box::new(
+            File::create(path)
+                .map_err(|e| ReporterError::CreateOutputFile { path: path.clone(), source: e })?,
+        ),
         None => Box::new(stdout()),
     };
 
@@ -354,7 +342,10 @@ where
         && let Some(ref cmp) = cmp
         && matches!(cmp.verdict, Verdict::Regressed | Verdict::Mixed)
     {
-        return Err(crate::Error::Regression { verdict: cmp.verdict, baseline: cmp.baseline_name.clone() });
+        return Err(crate::Error::Regression {
+            verdict: cmp.verdict,
+            baseline: cmp.baseline_name.clone(),
+        });
     }
 
     Ok(())

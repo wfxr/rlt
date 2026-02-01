@@ -55,10 +55,7 @@ pub struct PauseControl {
 impl PauseControl {
     /// Create a new pause controller in the running (not paused) state.
     pub fn new() -> Self {
-        Self {
-            paused: AtomicBool::new(false),
-            resume_notify: tokio::sync::Notify::new(),
-        }
+        Self { paused: AtomicBool::new(false), resume_notify: tokio::sync::Notify::new() }
     }
 
     /// Returns `true` if the benchmark is currently paused.

@@ -68,17 +68,11 @@ pub mod cli;
 pub mod collector;
 pub mod reporter;
 
-pub use crate::{
-    error::{BenchError, BenchResult, Error, Result},
-    phase::{BenchPhase, PauseControl, RunState},
-    report::BenchReport,
-    report::IterReport,
-    runner::BenchOpts,
-    runner::BenchOptsBuilder,
-    runner::IterInfo,
-    runner::{BenchSuite, StatelessBenchSuite},
-    status::{Status, StatusKind},
-};
-
 #[cfg(feature = "tracing")]
 pub use tui_logger::TuiTracingSubscriberLayer;
+
+pub use crate::error::{BenchError, BenchResult, Error, Result};
+pub use crate::phase::{BenchPhase, PauseControl, RunState};
+pub use crate::report::{BenchReport, IterReport};
+pub use crate::runner::{BenchOpts, BenchOptsBuilder, BenchSuite, IterInfo, StatelessBenchSuite};
+pub use crate::status::{Status, StatusKind};

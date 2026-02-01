@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status, cli::BenchCli};
+use rlt::cli::BenchCli;
+use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status};
 use tokio::time::{Duration, Instant};
 
 #[derive(Clone)]
