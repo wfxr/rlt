@@ -1,7 +1,6 @@
-use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{BenchSuite, IterInfo, IterReport, Status, bench_cli, bench_cli_run};
+use rlt::{BenchResult, BenchSuite, IterInfo, IterReport, Result, Status, bench_cli, bench_cli_run};
 use tokio::time::Instant;
 use tokio_postgres::{Client, NoTls};
 
@@ -35,7 +34,7 @@ bench_cli!(DBBench, {
 impl BenchSuite for DBBench {
     type WorkerState = Client;
 
-    async fn setup(&mut self, _worker_id: u32) -> Result<Self::WorkerState> {
+    async fn setup(&mut self, _worker_id: u32) -> BenchResult<Self::WorkerState> {
         let (client, conn) = tokio_postgres::connect(
             &format!(
                 "host={} port={} user={} password='{}'",
@@ -62,7 +61,7 @@ impl BenchSuite for DBBench {
         Ok(client)
     }
 
-    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> Result<IterReport> {
+    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();
         client
             .query(
@@ -80,7 +79,7 @@ impl BenchSuite for DBBench {
         })
     }
 
-    async fn teardown(self, client: Self::WorkerState, _: IterInfo) -> Result<()> {
+    async fn teardown(self, client: Self::WorkerState, _: IterInfo) -> BenchResult<()> {
         client.execute("ROLLBACK", &[]).await?;
         Ok(())
     }

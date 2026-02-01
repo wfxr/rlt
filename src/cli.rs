@@ -77,34 +77,11 @@ use crate::{
     baseline::{self, BaselineName, RegressionMetric, Verdict},
     clock::Clock,
     collector::{ReportCollector, SilentCollector, TuiCollector},
+    error::ReporterError,
     phase::{BenchPhase, PauseControl},
     reporter::{BenchReporter, JsonReporter, TextReporter},
     runner::{BenchOpts, BenchSuite, Runner},
 };
-
-/// Error indicating a performance regression was detected.
-///
-/// This error is returned by [`run`] when `--fail-on-regression` is set
-/// and the comparison verdict is `Regressed` or `Mixed`.
-#[derive(Debug, Clone)]
-pub struct RegressionError {
-    /// The comparison verdict that triggered this error.
-    pub verdict: Verdict,
-    /// The name of the baseline used for comparison.
-    pub baseline: String,
-}
-
-impl std::fmt::Display for RegressionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Performance regression detected: {} (baseline: {})",
-            self.verdict, self.baseline
-        )
-    }
-}
-
-impl std::error::Error for RegressionError {}
 
 /// Default regression metrics for baseline comparison.
 const DEFAULT_REGRESSION_METRICS: &[RegressionMetric] = &[
@@ -286,7 +263,7 @@ pub enum ReportFormat {
 }
 
 /// Run the benchmark with the given CLI options and benchmark suite.
-pub async fn run<BS>(cli: BenchCli, bench_suite: BS) -> anyhow::Result<()>
+pub async fn run<BS>(cli: BenchCli, bench_suite: BS) -> crate::Result<()>
 where
     BS: BenchSuite + Send + 'static,
     BS::WorkerState: Send + 'static,
@@ -346,8 +323,10 @@ where
     let cmp = baseline.map(|b| baseline::compare(&report, &b, cli.noise_threshold, &cli.regression_metrics));
 
     // Print report with comparison
-    let mut output: Box<dyn std::io::Write> = match cli.output_file {
-        Some(ref path) => Box::new(File::create(path)?),
+    let mut output: Box<dyn std::io::Write> = match &cli.output_file {
+        Some(path) => {
+            Box::new(File::create(path).map_err(|e| ReporterError::CreateOutputFile { path: path.clone(), source: e })?)
+        }
         None => Box::new(stdout()),
     };
 
@@ -375,7 +354,7 @@ where
         && let Some(ref cmp) = cmp
         && matches!(cmp.verdict, Verdict::Regressed | Verdict::Mixed)
     {
-        return Err(RegressionError { verdict: cmp.verdict, baseline: cmp.baseline_name.clone() }.into());
+        return Err(crate::Error::Regression { verdict: cmp.verdict, baseline: cmp.baseline_name.clone() });
     }
 
     Ok(())

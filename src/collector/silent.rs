@@ -12,12 +12,12 @@
 
 use std::collections::HashMap;
 
-use anyhow::Result;
 use async_trait::async_trait;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    BenchResult, Result,
     histogram::LatencyHistogram,
     report::{BenchReport, IterReport},
     runner::BenchOpts,
@@ -33,7 +33,7 @@ use crate::{
 /// The collector responds to `Ctrl+C` for graceful cancellation.
 pub struct SilentCollector {
     bench_opts: BenchOpts,
-    res_rx: UnboundedReceiver<Result<IterReport>>,
+    res_rx: UnboundedReceiver<BenchResult<IterReport>>,
     cancel: CancellationToken,
 }
 
@@ -41,7 +41,7 @@ impl SilentCollector {
     /// Create a new silent report collector.
     pub fn new(
         bench_opts: BenchOpts,
-        res_rx: UnboundedReceiver<Result<IterReport>>,
+        res_rx: UnboundedReceiver<BenchResult<IterReport>>,
         cancel: CancellationToken,
     ) -> Self {
         Self { bench_opts, res_rx, cancel }
@@ -50,7 +50,7 @@ impl SilentCollector {
 
 #[async_trait]
 impl super::ReportCollector for SilentCollector {
-    async fn run(&mut self) -> anyhow::Result<BenchReport> {
+    async fn run(&mut self) -> Result<BenchReport> {
         let mut hist = LatencyHistogram::new();
         let mut stats = IterStats::new();
         let mut status_dist = HashMap::default();

@@ -13,6 +13,10 @@ pub use storage::{load, load_file, resolve_baseline_dir, save};
 
 use std::{collections::BTreeMap, fmt, str::FromStr};
 
+use crate::error::BaselineError;
+
+type BaselineResult<T> = std::result::Result<T, BaselineError>;
+
 /// A validated baseline name.
 ///
 /// Baseline names must match the pattern `[a-zA-Z0-9_.-]+`:
@@ -181,16 +185,15 @@ impl Baseline {
     /// Validate that this baseline is comparable with the given CLI settings.
     ///
     /// This should be called **before** running the benchmark to fail fast on incompatible baselines.
-    pub fn validate(&self, cli: &crate::cli::BenchCli) -> anyhow::Result<()> {
+    pub fn validate(&self, cli: &crate::cli::BenchCli) -> BaselineResult<()> {
         let config = &self.metadata.bench_config;
 
         // Concurrency mismatch is an error - results would not be comparable
         if cli.concurrency.get() != config.concurrency {
-            anyhow::bail!(
-                "Concurrency mismatch: current={}, baseline={}. Results are not comparable.",
-                cli.concurrency.get(),
-                config.concurrency
-            );
+            return Err(BaselineError::ConcurrencyMismatch {
+                current: cli.concurrency.get(),
+                baseline: config.concurrency,
+            });
         }
 
         // Rate limit mismatch is an error - directly affects throughput
@@ -198,12 +201,13 @@ impl Baseline {
         {
             let current_rate = cli.rate.map(|r| r.get());
             if current_rate != config.rate_limit {
-                anyhow::bail!(
-                    "Rate limit mismatch: current={:?}, baseline={:?}. Results are not comparable.",
-                    current_rate,
-                    config.rate_limit
-                );
+                return Err(BaselineError::RateLimitMismatch { current: current_rate, baseline: config.rate_limit });
             }
+        }
+
+        #[cfg(not(feature = "rate_limit"))]
+        if config.rate_limit.is_some() {
+            return Err(BaselineError::RateLimitFeatureRequired);
         }
 
         Ok(())

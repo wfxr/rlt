@@ -1,18 +1,22 @@
-use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
+use crate::error::TuiError;
 use crate::phase::{BenchPhase, RunState};
+
+use super::TuiResult;
 
 use super::state::TimeWindowMode;
 
 impl super::TuiCollector {
     /// Handle the user input events. Returns `true` if the collector should quit.
-    pub(super) async fn handle_event(&mut self, elapsed: Duration) -> Result<bool> {
+    pub(super) async fn handle_event(&mut self, elapsed: Duration) -> TuiResult<bool> {
         let clock = &mut self.bench_opts.clock;
-        while crossterm::event::poll(Duration::from_secs(0))? {
+        while crossterm::event::poll(Duration::from_secs(0)).map_err(TuiError::Poll)? {
             use KeyCode::*;
-            if let Event::Key(KeyEvent { code, modifiers, .. }) = crossterm::event::read()? {
+            if let Event::Key(KeyEvent { code, modifiers, .. }) =
+                crossterm::event::read().map_err(TuiError::ReadEvent)?
+            {
                 match (code, modifiers) {
                     (Char('+'), _) => {
                         let tw = self.state.tm_win.effective(elapsed);

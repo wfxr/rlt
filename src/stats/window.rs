@@ -16,10 +16,11 @@
 
 use std::{collections::VecDeque, num::NonZeroUsize};
 
-use anyhow::{Result, ensure};
 use itertools::Itertools;
 use nonzero_ext::nonzero;
 use tokio::time::Duration;
+
+use crate::error::ConfigError;
 
 use crate::report::IterReport;
 
@@ -106,14 +107,18 @@ impl MultiScaleStatsWindow {
     /// # Errors
     ///
     /// Returns an error if `periods` is empty or contains zero.
-    pub fn new<I, P>(buckets: NonZeroUsize, periods: I) -> Result<Self>
+    pub fn new<I, P>(buckets: NonZeroUsize, periods: I) -> std::result::Result<Self, ConfigError>
     where
         I: IntoIterator<Item = P>,
         P: Into<usize>,
     {
         let periods = periods.into_iter().map(Into::into).collect_vec();
-        ensure!(!periods.is_empty(), "periods must be non-empty");
-        ensure!(periods.iter().all(|p| *p > 0), "periods must be > 0");
+        if periods.is_empty() {
+            return Err(ConfigError::WindowPeriodsEmpty);
+        }
+        if let Some(&period) = periods.iter().find(|p| **p == 0) {
+            return Err(ConfigError::WindowPeriodZero { period });
+        }
         let windows = periods.iter().map(|_| StatsWindow::new(buckets)).collect();
         Ok(Self { tick: 0, periods, windows })
     }
@@ -314,7 +319,7 @@ mod tests {
         let err = MultiScaleStatsWindow::new(nonzero!(2usize), [0usize])
             .err()
             .expect("expected error");
-        assert_eq!(err.to_string(), "periods must be > 0");
+        assert_eq!(err.to_string(), "stats window period must be > 0 (got 0)");
     }
 
     #[test]
@@ -322,6 +327,6 @@ mod tests {
         let err = MultiScaleStatsWindow::new(nonzero!(2usize), std::iter::empty::<usize>())
             .err()
             .expect("expected error");
-        assert_eq!(err.to_string(), "periods must be non-empty");
+        assert_eq!(err.to_string(), "stats window periods must be non-empty");
     }
 }

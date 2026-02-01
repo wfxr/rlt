@@ -33,6 +33,7 @@ use async_trait::async_trait;
 pub use silent::SilentCollector;
 pub use tui::TuiCollector;
 
+use crate::Result;
 use crate::report::BenchReport;
 
 /// A trait for collecting iteration results and generating benchmark reports.
@@ -50,5 +51,5 @@ pub trait ReportCollector: Send + Sync {
     ///
     /// Returns an error if the collector encounters issues during collection
     /// (e.g., histogram overflow, I/O errors for TUI).
-    async fn run(&mut self) -> anyhow::Result<BenchReport>;
+    async fn run(&mut self) -> Result<BenchReport>;
 }

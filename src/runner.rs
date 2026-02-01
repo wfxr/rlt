@@ -1,5 +1,4 @@
 //! This module defines traits for stateful and stateless benchmark suites.
-use anyhow::Result;
 use async_trait::async_trait;
 use std::{
     sync::{
@@ -25,6 +24,7 @@ cfg_if::cfg_if! {
 
 use crate::{
     clock::Clock,
+    error::{BenchResult, ConfigError, Error, Result},
     phase::{BenchPhase, PauseControl},
     // rate_limiter::{self, RateLimiter},
     report::IterReport,
@@ -149,21 +149,23 @@ impl BenchOptsBuilder {
     }
 
     /// Build [`BenchOpts`].
-    pub fn build(self) -> Result<BenchOpts> {
-        anyhow::ensure!(self.concurrency > 0, "concurrency must be non-zero");
+    pub fn build(self) -> std::result::Result<BenchOpts, ConfigError> {
+        if self.concurrency == 0 {
+            return Err(ConfigError::ConcurrencyZero);
+        }
 
         #[cfg(feature = "rate_limit")]
         let rate = match self.rate {
             None => None,
             Some(r) => {
-                let r = NonZeroU32::new(r).ok_or_else(|| anyhow::anyhow!("rate must be non-zero"))?;
+                let r = NonZeroU32::new(r).ok_or(ConfigError::RateZero)?;
                 Some(r)
             }
         };
 
         #[cfg(not(feature = "rate_limit"))]
         if self.rate.is_some() {
-            anyhow::bail!("rate_limit feature is disabled; enable it to use BenchOptsBuilder::rate()")
+            return Err(ConfigError::RateLimitFeatureDisabled);
         }
 
         Ok(BenchOpts {
@@ -186,14 +188,14 @@ pub trait BenchSuite: Clone {
 
     /// Setup procedure before each worker starts.
     /// Initialize and return the worker state (e.g., HTTP client, DB connection).
-    async fn setup(&mut self, worker_id: u32) -> Result<Self::WorkerState>;
+    async fn setup(&mut self, worker_id: u32) -> BenchResult<Self::WorkerState>;
 
     /// Run a single iteration of the benchmark.
-    async fn bench(&mut self, state: &mut Self::WorkerState, info: &IterInfo) -> Result<IterReport>;
+    async fn bench(&mut self, state: &mut Self::WorkerState, info: &IterInfo) -> BenchResult<IterReport>;
 
     /// Teardown procedure after each worker finishes.
     #[allow(unused_variables)]
-    async fn teardown(self, state: Self::WorkerState, info: IterInfo) -> Result<()> {
+    async fn teardown(self, state: Self::WorkerState, info: IterInfo) -> BenchResult<()> {
         Ok(())
     }
 }
@@ -202,7 +204,7 @@ pub trait BenchSuite: Clone {
 #[async_trait]
 pub trait StatelessBenchSuite {
     /// Run a single iteration of the benchmark.
-    async fn bench(&mut self, info: &IterInfo) -> Result<IterReport>;
+    async fn bench(&mut self, info: &IterInfo) -> BenchResult<IterReport>;
 }
 
 #[async_trait]
@@ -212,11 +214,11 @@ where
 {
     type WorkerState = ();
 
-    async fn setup(&mut self, _worker_id: u32) -> Result<()> {
+    async fn setup(&mut self, _worker_id: u32) -> BenchResult<()> {
         Ok(())
     }
 
-    async fn bench(&mut self, _: &mut Self::WorkerState, info: &IterInfo) -> Result<IterReport> {
+    async fn bench(&mut self, _: &mut Self::WorkerState, info: &IterInfo) -> BenchResult<IterReport> {
         StatelessBenchSuite::bench(self, info).await
     }
 }
@@ -229,7 +231,7 @@ where
 {
     suite: BS,
     opts: BenchOpts,
-    res_tx: mpsc::UnboundedSender<Result<IterReport>>,
+    res_tx: mpsc::UnboundedSender<BenchResult<IterReport>>,
     pause: Arc<PauseControl>,
     cancel: CancellationToken,
     seq: Arc<AtomicU64>,
@@ -265,7 +267,7 @@ where
     pub fn new(
         suite: BS,
         opts: BenchOpts,
-        res_tx: mpsc::UnboundedSender<Result<IterReport>>,
+        res_tx: mpsc::UnboundedSender<BenchResult<IterReport>>,
         pause: Arc<PauseControl>,
         cancel: CancellationToken,
         phase_tx: watch::Sender<BenchPhase>,
@@ -281,7 +283,7 @@ where
         }
     }
 
-    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) -> Result<IterReport> {
+    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) -> BenchResult<IterReport> {
         self.pause.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
 
@@ -335,7 +337,11 @@ where
             let barrier = barrier.clone();
 
             set.spawn(async move {
-                let mut state = b.suite.setup(worker).await?;
+                let mut state = b
+                    .suite
+                    .setup(worker)
+                    .await
+                    .map_err(|e| Error::WorkerSetup { worker_id: worker, source: e })?;
                 let mut info = IterInfo::new(worker);
                 let cancel = b.cancel.clone();
 
@@ -508,7 +514,7 @@ mod tests {
     #[test]
     fn test_bench_opts_builder_rate_requires_feature() {
         let err = BenchOpts::builder().rate(100).build().unwrap_err();
-        assert!(err.to_string().contains("rate_limit feature is disabled"));
+        assert!(err.to_string().contains("feature `rate_limit` is disabled"));
     }
 
     #[test]
@@ -519,7 +525,7 @@ mod tests {
 
         #[async_trait]
         impl StatelessBenchSuite for EmptyBench {
-            async fn bench(&mut self, _: &IterInfo) -> Result<IterReport> {
+            async fn bench(&mut self, _: &IterInfo) -> BenchResult<IterReport> {
                 Ok(IterReport {
                     duration: Duration::ZERO,
                     status: Status::success(0),
@@ -551,7 +557,7 @@ mod tests {
             .unwrap();
 
         rt.block_on(async move {
-            let (res_tx, res_rx) = mpsc::unbounded_channel::<Result<IterReport>>();
+            let (res_tx, res_rx) = mpsc::unbounded_channel::<BenchResult<IterReport>>();
             drop(res_rx);
 
             let pause = Arc::new(PauseControl::new());
@@ -634,7 +640,7 @@ mod tests {
     impl BenchSuite for TrackedSuite {
         type WorkerState = ();
 
-        async fn setup(&mut self, worker_id: u32) -> Result<()> {
+        async fn setup(&mut self, worker_id: u32) -> BenchResult<()> {
             if worker_id == 0 {
                 tokio::time::sleep(Duration::from_millis(self.setup_delay_ms)).await;
             }
@@ -642,7 +648,7 @@ mod tests {
             Ok(())
         }
 
-        async fn bench(&mut self, _: &mut (), _: &IterInfo) -> Result<IterReport> {
+        async fn bench(&mut self, _: &mut (), _: &IterInfo) -> BenchResult<IterReport> {
             let phase = if self.clock.elapsed() == Duration::ZERO {
                 Phase::Warmup
             } else {
@@ -770,11 +776,11 @@ mod tests {
     impl BenchSuite for PauseAtBenchSuite {
         type WorkerState = ();
 
-        async fn setup(&mut self, _worker_id: u32) -> Result<()> {
+        async fn setup(&mut self, _worker_id: u32) -> BenchResult<()> {
             Ok(())
         }
 
-        async fn bench(&mut self, _: &mut (), info: &IterInfo) -> Result<IterReport> {
+        async fn bench(&mut self, _: &mut (), info: &IterInfo) -> BenchResult<IterReport> {
             if self.warmups > 0
                 && info.runner_seq + 1 == self.warmups
                 && !self.last_warmup_seen.swap(true, Ordering::Relaxed)

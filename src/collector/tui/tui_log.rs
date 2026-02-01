@@ -1,4 +1,3 @@
-use anyhow::Result;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -15,10 +14,10 @@ pub(crate) struct LogState {
 }
 
 impl LogState {
-    pub(crate) fn from_env() -> Result<Self> {
+    pub(crate) fn from_env() -> Self {
         tui_logger::set_default_level(LevelFilter::Trace);
         let state = TuiWidgetState::new().set_default_display_level(LevelFilter::Info);
-        Ok(Self { inner: state, display: false })
+        Self { inner: state, display: false }
     }
 }
 

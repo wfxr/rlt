@@ -1,8 +1,7 @@
-use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
 use reqwest::{Client, Url};
-use rlt::{BenchSuite, IterInfo, IterReport, bench_cli, bench_cli_run};
+use rlt::{BenchResult, BenchSuite, IterInfo, IterReport, Result, bench_cli, bench_cli_run};
 use tokio::time::Instant;
 
 bench_cli!(HttpBench, {
@@ -15,11 +14,11 @@ bench_cli!(HttpBench, {
 impl BenchSuite for HttpBench {
     type WorkerState = Client;
 
-    async fn setup(&mut self, _worker_id: u32) -> Result<Self::WorkerState> {
+    async fn setup(&mut self, _worker_id: u32) -> BenchResult<Self::WorkerState> {
         Ok(Client::new())
     }
 
-    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> Result<IterReport> {
+    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();
         let resp = client.get(self.url.clone()).send().await?;
         let status = resp.status().into();
