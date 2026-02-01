@@ -4,41 +4,35 @@
 //! - Converting byte counts to human-readable formats (KiB, MiB, GiB, etc.)
 //! - Calculating rates safely (handling division by zero)
 
-use anyhow::anyhow;
 use byte_unit::{Byte, UnitType};
 
-/// Trait for converting a value to a human-readable byte representation.
-///
-/// This fallible version is used for floating-point values that might
-/// be too large to represent.
-pub trait TryIntoAdjustedByte {
-    /// Converts the value to an appropriate byte unit (KiB, MiB, GiB, etc.).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value is too large to represent as bytes.
-    fn adjusted(self) -> anyhow::Result<byte_unit::AdjustedByte>;
+fn format_byte(byte: Byte, precision: usize) -> String {
+    format!(
+        "{:.prec$}",
+        byte.get_appropriate_unit(UnitType::Binary),
+        prec = precision
+    )
 }
 
-/// Trait for converting a value to a human-readable byte representation.
-///
-/// This infallible version is used for integer values that are always representable.
-pub trait IntoAdjustedByte {
-    /// Converts the value to an appropriate byte unit (KiB, MiB, GiB, etc.).
-    fn adjusted(self) -> byte_unit::AdjustedByte;
+/// Trait for formatting a value as a human-readable byte string.
+pub trait HumanBytes {
+    /// Formats the value as bytes with the given precision.
+    ///
+    /// Returns "N/A" for values that cannot be represented (e.g., NaN, Inf, negative).
+    fn human_bytes(self, precision: usize) -> String;
 }
 
-impl TryIntoAdjustedByte for f64 {
-    fn adjusted(self) -> anyhow::Result<byte_unit::AdjustedByte> {
+impl HumanBytes for f64 {
+    fn human_bytes(self, precision: usize) -> String {
         Byte::from_f64(self)
-            .ok_or(anyhow!("size too large"))
-            .map(|b| b.get_appropriate_unit(UnitType::Binary))
+            .map(|b| format_byte(b, precision))
+            .unwrap_or_else(|| "N/A".to_string())
     }
 }
 
-impl IntoAdjustedByte for u64 {
-    fn adjusted(self) -> byte_unit::AdjustedByte {
-        Byte::from_u64(self).get_appropriate_unit(UnitType::Binary)
+impl HumanBytes for u64 {
+    fn human_bytes(self, precision: usize) -> String {
+        format_byte(Byte::from_u64(self), precision)
     }
 }
 

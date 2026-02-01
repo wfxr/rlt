@@ -38,8 +38,10 @@ use crate::{
     histogram::{LatencyHistogram, PERCENTAGES},
     report::BenchReport,
     status::{Status, StatusKind},
-    util::{IntoAdjustedByte, TryIntoAdjustedByte, rate},
+    util::{HumanBytes, rate},
 };
+
+use super::ReporterResult;
 
 /// A text reporter that outputs human-readable, colored benchmark results.
 ///
@@ -57,7 +59,7 @@ use crate::{
 pub struct TextReporter;
 
 impl super::BenchReporter for TextReporter {
-    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> anyhow::Result<()> {
+    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> ReporterResult<()> {
         print_summary(w, report)?;
 
         if report.stats.overall.iters > 0 {
@@ -101,7 +103,7 @@ fn print_latency_histogram(
     hist: &LatencyHistogram,
     u: TimeUnit,
     indent: usize,
-) -> anyhow::Result<()> {
+) -> ReporterResult<()> {
     let quantiles = hist
         .quantiles()
         .map(|(latency, count)| (format!("{:.2}", FormattedDuration::from(latency, u)), count))
@@ -144,7 +146,7 @@ fn render_bar(count: u64, max_count: u64) -> String {
 }
 
 #[rustfmt::skip]
-fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
+fn print_summary(w: &mut dyn Write, report: &BenchReport) -> ReporterResult<()> {
     let elapsed = report.elapsed.as_secs_f64();
     let overall = &report.stats.overall;
 
@@ -169,8 +171,8 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> 
         ],
         vec![
             "Bytes".into(),
-            format!("{:.2}", overall.bytes.adjusted()),
-            format!("{:.2}/s", rate(overall.bytes, elapsed).adjusted()?),
+            overall.bytes.human_bytes(2),
+            format!("{}/s", rate(overall.bytes, elapsed).human_bytes(2)),
         ],
     ];
     let mut stats = Builder::from(stats).build();
@@ -188,7 +190,7 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> 
     Ok(())
 }
 
-fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram) -> anyhow::Result<()> {
+fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram) -> ReporterResult<()> {
     writeln!(w, "{}", "Latencies".h1())?;
     if hist.is_empty() {
         return Ok(());
@@ -211,7 +213,7 @@ fn print_latency(w: &mut dyn Write, hist: &LatencyHistogram) -> anyhow::Result<(
     Ok(())
 }
 
-fn print_latency_stats(w: &mut dyn Write, hist: &LatencyHistogram, u: TimeUnit) -> anyhow::Result<()> {
+fn print_latency_stats(w: &mut dyn Write, hist: &LatencyHistogram, u: TimeUnit) -> ReporterResult<()> {
     let stats = vec![
         vec!["Avg".into(), "Min".into(), "Med".into(), "Max".into(), "Stdev".into()],
         vec![
@@ -238,7 +240,7 @@ fn print_latency_stats(w: &mut dyn Write, hist: &LatencyHistogram, u: TimeUnit) 
     Ok(())
 }
 
-fn print_latency_percentiles(w: &mut dyn Write, hist: &LatencyHistogram, u: TimeUnit) -> anyhow::Result<()> {
+fn print_latency_percentiles(w: &mut dyn Write, hist: &LatencyHistogram, u: TimeUnit) -> ReporterResult<()> {
     let percentiles = hist.percentiles(PERCENTAGES).map(|(p, v)| {
         vec![
             format!("{:.2}%", p),
@@ -259,7 +261,7 @@ fn print_latency_percentiles(w: &mut dyn Write, hist: &LatencyHistogram, u: Time
     Ok(())
 }
 
-fn print_status(w: &mut dyn Write, status: &HashMap<Status, u64>) -> anyhow::Result<()> {
+fn print_status(w: &mut dyn Write, status: &HashMap<Status, u64>) -> ReporterResult<()> {
     let status_v = status
         .iter()
         .sorted_unstable_by_key(|&(_, cnt)| Reverse(cnt))
@@ -283,7 +285,7 @@ fn print_status(w: &mut dyn Write, status: &HashMap<Status, u64>) -> anyhow::Res
     Ok(())
 }
 
-fn print_error(w: &mut dyn Write, report: &BenchReport) -> anyhow::Result<()> {
+fn print_error(w: &mut dyn Write, report: &BenchReport) -> ReporterResult<()> {
     let error_v = report
         .error_dist
         .iter()
@@ -316,10 +318,7 @@ impl<T: AsRef<str>> ReportStyle for T {
 fn format_rate(value: f64, metric: RegressionMetric) -> String {
     match metric {
         RegressionMetric::SuccessRatio => format!("{:.2}%", value * 100.0),
-        RegressionMetric::BytesRate => match value.adjusted() {
-            Ok(adjusted) => format!("{:.2}/s", adjusted),
-            Err(_) => format!("{:.2}/s", value),
-        },
+        RegressionMetric::BytesRate => format!("{}/s", value.human_bytes(2)),
         _ => format!("{:.2}/s", value),
     }
 }
@@ -355,7 +354,7 @@ fn format_metric_name(
     format!("{}{}", prefix, metric.display_name())
 }
 
-fn print_baseline_comparison(w: &mut dyn Write, cmp: &Comparison, u: TimeUnit) -> anyhow::Result<()> {
+fn print_baseline_comparison(w: &mut dyn Write, cmp: &Comparison, u: TimeUnit) -> ReporterResult<()> {
     writeln!(w, "{}", "Baseline Comparison".h1())?;
 
     // Summary line
@@ -409,7 +408,7 @@ fn print_baseline_comparison(w: &mut dyn Write, cmp: &Comparison, u: TimeUnit) -
     Ok(())
 }
 
-fn print_throughput_comparison(w: &mut dyn Write, cmp: &Comparison) -> anyhow::Result<()> {
+fn print_throughput_comparison(w: &mut dyn Write, cmp: &Comparison) -> ReporterResult<()> {
     let throughput = &cmp.throughput;
     let mut rows = vec![(RegressionMetric::ItersRate, &throughput.iters_rate)];
     if let Some(ref items_rate) = throughput.items_rate {
@@ -427,7 +426,7 @@ fn print_latency_comparison(
     u: TimeUnit,
     regression_metrics: &[RegressionMetric],
     skipped_metrics: &[RegressionMetric],
-) -> anyhow::Result<()> {
+) -> ReporterResult<()> {
     let mut rows = vec![
         (RegressionMetric::LatencyMean, &deltas.mean),
         (RegressionMetric::LatencyMedian, &deltas.median),
@@ -448,7 +447,7 @@ fn print_latency_comparison(
     )
 }
 
-fn print_reliability_comparison(w: &mut dyn Write, cmp: &Comparison) -> anyhow::Result<()> {
+fn print_reliability_comparison(w: &mut dyn Write, cmp: &Comparison) -> ReporterResult<()> {
     let rows = [(RegressionMetric::SuccessRatio, &cmp.success_ratio)];
     print_comparison_table(w, &rows, format_rate, &cmp.regression_metrics, &cmp.skipped_metrics)
 }
@@ -459,7 +458,7 @@ fn print_comparison_table<F>(
     format_value: F,
     regression_metrics: &[RegressionMetric],
     skipped_metrics: &[RegressionMetric],
-) -> anyhow::Result<()>
+) -> ReporterResult<()>
 where
     F: Fn(f64, RegressionMetric) -> String,
 {

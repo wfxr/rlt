@@ -36,10 +36,9 @@ rlt = "0.3"
 For simple benchmarks without per-worker state, implement the `StatelessBenchSuite` trait:
 
 ```rust
-use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{cli::BenchCli, IterInfo, IterReport, StatelessBenchSuite, Status};
+use rlt::{cli::BenchCli, BenchResult, IterInfo, IterReport, StatelessBenchSuite, Status};
 use tokio::time::Instant;
 
 #[derive(Clone)]
@@ -47,7 +46,7 @@ struct SimpleBench;
 
 #[async_trait]
 impl StatelessBenchSuite for SimpleBench {
-    async fn bench(&mut self, _: &IterInfo) -> Result<IterReport> {
+    async fn bench(&mut self, _: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();
         // Your benchmark logic here
         Ok(IterReport { duration: t.elapsed(), status: Status::success(0), bytes: 0, items: 1 })
@@ -55,7 +54,7 @@ impl StatelessBenchSuite for SimpleBench {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> rlt::Result<()> {
     rlt::cli::run(BenchCli::parse(), SimpleBench).await
 }
 ```
@@ -76,11 +75,11 @@ bench_cli!(HttpBench, {
 impl BenchSuite for HttpBench {
     type WorkerState = Client;
 
-    async fn setup(&mut self, _worker_id: u32) -> Result<Self::WorkerState> {
+    async fn setup(&mut self, _worker_id: u32) -> BenchResult<Self::WorkerState> {
         Ok(Client::new())
     }
 
-    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> Result<IterReport> {
+    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();
         let resp = client.get(self.url.clone()).send().await?;
         let status = resp.status().into();
@@ -98,7 +97,7 @@ Finally, create the main function to run the load test using the `bench_cli_run!
 
 ```rust
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> rlt::Result<()> {
     bench_cli_run!(HttpBench).await
 }
 ```

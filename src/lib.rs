@@ -17,10 +17,9 @@
 //! A simple example of a stateless bench suite:
 //!
 //! ```no_run
-//! use anyhow::Result;
 //! use async_trait::async_trait;
 //! use clap::Parser;
-//! use rlt::{cli::BenchCli, IterInfo, IterReport, StatelessBenchSuite, Status};
+//! use rlt::{cli::BenchCli, BenchResult, IterInfo, IterReport, StatelessBenchSuite, Status};
 //! use tokio::time::Instant;
 //!
 //! #[derive(Clone)]
@@ -28,7 +27,7 @@
 //!
 //! #[async_trait]
 //! impl StatelessBenchSuite for SimpleBench {
-//!     async fn bench(&mut self, _: &IterInfo) -> Result<IterReport> {
+//!     async fn bench(&mut self, _: &IterInfo) -> BenchResult<IterReport> {
 //!         let t = Instant::now();
 //!         // do the work here
 //!         let duration = t.elapsed();
@@ -44,7 +43,7 @@
 //! }
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<()> {
+//! async fn main() -> rlt::Result<()> {
 //!     rlt::cli::run(BenchCli::parse(), SimpleBench).await
 //! }
 //! ```
@@ -54,6 +53,7 @@
 
 pub mod clock;
 mod duration;
+pub mod error;
 mod histogram;
 mod phase;
 mod report;
@@ -69,6 +69,7 @@ pub mod collector;
 pub mod reporter;
 
 pub use crate::{
+    error::{BenchError, BenchResult, Error, Result},
     phase::{BenchPhase, PauseControl, RunState},
     report::BenchReport,
     report::IterReport,

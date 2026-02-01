@@ -3,14 +3,9 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
-use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{
-    IterReport, Status,
-    cli::BenchCli,
-    {IterInfo, StatelessBenchSuite},
-};
+use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status, cli::BenchCli};
 use tokio::time::{Duration, Instant};
 
 /// Demonstration of warmup functionality.
@@ -41,7 +36,7 @@ const WARMUP_ITERS: u64 = 10;
 
 #[async_trait]
 impl StatelessBenchSuite for SimpleBench {
-    async fn bench(&mut self, info: &IterInfo) -> Result<IterReport> {
+    async fn bench(&mut self, info: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();
 
         let d = if self.iters.fetch_add(1, Ordering::Relaxed) < WARMUP_ITERS {

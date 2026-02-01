@@ -22,10 +22,9 @@
 
 use std::time::Duration;
 
-use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{IterInfo, IterReport, StatelessBenchSuite, Status, cli::BenchCli};
+use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status, cli::BenchCli};
 use tokio::time::Instant;
 
 #[derive(Parser, Clone)]
@@ -48,7 +47,7 @@ struct BaselineDemo {
 
 #[async_trait]
 impl StatelessBenchSuite for BaselineDemo {
-    async fn bench(&mut self, info: &IterInfo) -> Result<IterReport> {
+    async fn bench(&mut self, info: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();
 
         // Simulate work with configurable latency + some variance

@@ -66,7 +66,7 @@ cargo clippy                     # Run linter
 ## Code Style
 
 - Max line width: 120 characters (see rustfmt.toml)
-- Uses `anyhow::Result` for error handling
+- Uses `rlt::Result` for framework errors, `rlt::BenchResult` (backed by `anyhow::Error`) for user benchmarks
 - Async-first with tokio runtime
 - Uses `async-trait` for async trait methods
 

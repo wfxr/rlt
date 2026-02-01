@@ -24,6 +24,8 @@ use crate::{baseline::Comparison, histogram::PERCENTAGES, report::BenchReport, u
 use super::BenchReporter;
 
 use serde::Serialize;
+
+use super::ReporterResult;
 use std::{collections::BTreeMap, io::Write};
 
 /// A JSON reporter that outputs machine-readable benchmark results.
@@ -44,7 +46,7 @@ use std::{collections::BTreeMap, io::Write};
 pub struct JsonReporter;
 
 impl BenchReporter for JsonReporter {
-    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> anyhow::Result<()> {
+    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> ReporterResult<()> {
         let elapsed = report.elapsed.as_secs_f64();
         let overall = &report.stats.overall;
         let summary = Summary {

@@ -15,7 +15,7 @@ use crate::{
     runner::BenchOpts,
     stats::{Counter, MultiScaleStatsWindow, RecentStatsWindow},
     status::{Status, StatusKind},
-    util::{IntoAdjustedByte, TryIntoAdjustedByte},
+    util::HumanBytes,
 };
 
 use super::state::TimeWindow;
@@ -108,10 +108,7 @@ fn render_stats_counter(counter: &Counter) -> Paragraph<'static> {
     let lines = vec![
         Line::from(vec!["Items: ".into(), counter.items.to_string().green()]),
         Line::from(vec!["Iters: ".into(), counter.iters.to_string().green()]),
-        Line::from(vec![
-            "Bytes: ".into(),
-            format!("{:.2}", counter.bytes.adjusted()).green(),
-        ]),
+        Line::from(vec!["Bytes: ".into(), counter.bytes.human_bytes(2).green()]),
     ];
     Paragraph::new(lines).block(Block::new().borders(Borders::NONE))
 }
@@ -121,16 +118,7 @@ fn render_stats_rate(counter: &Counter, elapsed: Duration) -> Paragraph<'static>
     let lines = vec![
         Line::from(format!("{:.2} iters/s", counter.iters as f64 / secs).green()),
         Line::from(format!("{:.2} items/s", counter.items as f64 / secs).green()),
-        Line::from(
-            format!(
-                "{}/s",
-                match (counter.bytes as f64 / secs).adjusted() {
-                    Ok(bps) => format!("{:.2}", bps),
-                    Err(_) => "NaN B".to_string(),
-                }
-            )
-            .green(),
-        ),
+        Line::from(format!("{}/s", (counter.bytes as f64 / secs).human_bytes(2)).green()),
     ];
     Paragraph::new(lines).block(Block::new().borders(Borders::NONE))
 }

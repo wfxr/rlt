@@ -1,11 +1,6 @@
-use anyhow::Result;
 use async_trait::async_trait;
 use clap::Parser;
-use rlt::{
-    IterReport, Status,
-    cli::BenchCli,
-    {IterInfo, StatelessBenchSuite},
-};
+use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status, cli::BenchCli};
 use tokio::time::{Duration, Instant};
 
 #[derive(Clone)]
@@ -13,7 +8,7 @@ struct SimpleBench;
 
 #[async_trait]
 impl StatelessBenchSuite for SimpleBench {
-    async fn bench(&mut self, info: &IterInfo) -> Result<IterReport> {
+    async fn bench(&mut self, info: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();
 
         // simulate some work

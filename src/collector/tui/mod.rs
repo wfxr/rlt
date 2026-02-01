@@ -29,7 +29,6 @@ mod terminal;
 #[cfg(feature = "tracing")]
 mod tui_log;
 
-use anyhow::Result;
 use async_trait::async_trait;
 use nonzero_ext::nonzero;
 use std::{collections::HashMap, num::NonZeroU8, sync::Arc, time::Duration};
@@ -43,7 +42,9 @@ use state::{TimeWindow, TimeWindowMode, TuiCollectorState};
 use terminal::Terminal;
 
 use crate::{
+    BenchResult, Result,
     collector::ReportCollector,
+    error::TuiError,
     histogram::LatencyHistogram,
     phase::{BenchPhase, PauseControl, RunState},
     report::{BenchReport, IterReport},
@@ -51,6 +52,8 @@ use crate::{
     stats::{IterStats, MultiScaleStatsWindow, RecentStatsWindow},
     status::Status,
 };
+
+type TuiResult<T> = std::result::Result<T, TuiError>;
 
 const SECOND: Duration = Duration::from_secs(1);
 
@@ -77,7 +80,7 @@ pub struct TuiCollector {
     /// Refresh rate in frames per second (fps).
     pub(crate) fps: NonZeroU8,
     /// Channel receiver for iteration reports from workers.
-    pub(crate) res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
+    pub(crate) res_rx: mpsc::UnboundedReceiver<BenchResult<IterReport>>,
     /// Pause control shared with the runner.
     pub(crate) pause: Arc<PauseControl>,
     /// Cancellation token for graceful shutdown.
@@ -96,17 +99,17 @@ impl TuiCollector {
     pub fn new(
         bench_opts: BenchOpts,
         fps: NonZeroU8,
-        res_rx: mpsc::UnboundedReceiver<Result<IterReport>>,
+        res_rx: mpsc::UnboundedReceiver<BenchResult<IterReport>>,
         pause: Arc<PauseControl>,
         cancel: CancellationToken,
         auto_quit: bool,
         phase_rx: watch::Receiver<BenchPhase>,
-    ) -> Result<Self> {
+    ) -> TuiResult<Self> {
         let state = TuiCollectorState {
             tm_win: TimeWindowMode::Auto,
             run_state: RunState::Running,
             #[cfg(feature = "tracing")]
-            log: tui_log::LogState::from_env()?,
+            log: tui_log::LogState::from_env(),
         };
         Ok(Self {
             bench_opts,
