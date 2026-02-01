@@ -1,4 +1,3 @@
-use anyhow::Result;
 use async_trait::async_trait;
 use bytes::Bytes;
 use clap::Parser;
@@ -9,7 +8,7 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
-use rlt::{BenchSuite, IterInfo, IterReport, bench_cli};
+use rlt::{BenchResult, BenchSuite, IterInfo, IterReport, Result, bench_cli};
 use tokio::time::Instant;
 
 bench_cli!(Opts, {
@@ -27,13 +26,13 @@ struct HttpBench {
 impl BenchSuite for HttpBench {
     type WorkerState = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;
 
-    async fn setup(&mut self, _worker_id: u32) -> Result<Self::WorkerState> {
+    async fn setup(&mut self, _worker_id: u32) -> BenchResult<Self::WorkerState> {
         let https = HttpsConnector::new();
         let client = Client::builder(TokioExecutor::new()).build(https);
         Ok(client)
     }
 
-    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> Result<IterReport> {
+    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();
         let mut resp = client.get(self.url.clone()).await?;
         let status = resp.status().into();

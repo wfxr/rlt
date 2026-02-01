@@ -33,6 +33,7 @@ pub use json::JsonReporter;
 pub use text::TextReporter;
 
 use crate::baseline::Comparison;
+use crate::error::ReporterError;
 use crate::report::BenchReport;
 
 /// A trait for formatting and outputting benchmark reports.
@@ -56,5 +57,5 @@ pub trait BenchReporter {
         w: &mut dyn std::io::Write,
         report: &BenchReport,
         comparison: Option<&Comparison>,
-    ) -> anyhow::Result<()>;
+    ) -> std::result::Result<(), ReporterError>;
 }

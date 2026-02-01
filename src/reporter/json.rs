@@ -23,6 +23,8 @@ use crate::{baseline::Comparison, histogram::PERCENTAGES, report::BenchReport, u
 
 use super::BenchReporter;
 
+use crate::error::ReporterError;
+
 use serde::Serialize;
 use std::{collections::BTreeMap, io::Write};
 
@@ -44,7 +46,12 @@ use std::{collections::BTreeMap, io::Write};
 pub struct JsonReporter;
 
 impl BenchReporter for JsonReporter {
-    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> anyhow::Result<()> {
+    fn print(
+        &self,
+        w: &mut dyn Write,
+        report: &BenchReport,
+        comparison: Option<&Comparison>,
+    ) -> std::result::Result<(), ReporterError> {
         let elapsed = report.elapsed.as_secs_f64();
         let overall = &report.stats.overall;
         let summary = Summary {

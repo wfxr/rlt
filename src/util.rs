@@ -4,8 +4,9 @@
 //! - Converting byte counts to human-readable formats (KiB, MiB, GiB, etc.)
 //! - Calculating rates safely (handling division by zero)
 
-use anyhow::anyhow;
 use byte_unit::{Byte, UnitType};
+
+use crate::error::ByteFormatError;
 
 /// Trait for converting a value to a human-readable byte representation.
 ///
@@ -17,7 +18,7 @@ pub trait TryIntoAdjustedByte {
     /// # Errors
     ///
     /// Returns an error if the value is too large to represent as bytes.
-    fn adjusted(self) -> anyhow::Result<byte_unit::AdjustedByte>;
+    fn adjusted(self) -> std::result::Result<byte_unit::AdjustedByte, ByteFormatError>;
 }
 
 /// Trait for converting a value to a human-readable byte representation.
@@ -29,9 +30,9 @@ pub trait IntoAdjustedByte {
 }
 
 impl TryIntoAdjustedByte for f64 {
-    fn adjusted(self) -> anyhow::Result<byte_unit::AdjustedByte> {
+    fn adjusted(self) -> std::result::Result<byte_unit::AdjustedByte, ByteFormatError> {
         Byte::from_f64(self)
-            .ok_or(anyhow!("size too large"))
+            .ok_or(ByteFormatError::TooLarge { value: self })
             .map(|b| b.get_appropriate_unit(UnitType::Binary))
     }
 }

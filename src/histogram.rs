@@ -1,7 +1,9 @@
 //! A simple wrapper around [`hdrhistogram::Histogram`] for latency measurements.
 use std::time::Duration;
 
-use hdrhistogram::{Histogram, RecordError};
+use hdrhistogram::Histogram;
+
+use crate::error::CollectorError;
 
 pub(crate) const PERCENTAGES: &[f64] = &[10.0, 25.0, 50.0, 75.0, 90.0, 95.0, 99.0, 99.9, 99.99];
 
@@ -17,8 +19,11 @@ impl LatencyHistogram {
     }
 
     /// Records a latency value.
-    pub fn record(&mut self, d: Duration) -> Result<(), RecordError> {
-        self.hist.record(d.as_nanos() as u64)
+    pub fn record(&mut self, d: Duration) -> std::result::Result<(), CollectorError> {
+        let nanos = u64::try_from(d.as_nanos()).map_err(|_| CollectorError::LatencyTooLarge { nanos: d.as_nanos() })?;
+        self.hist
+            .record(nanos)
+            .map_err(|e| CollectorError::HistogramRecord { nanos, source: e })
     }
 
     /// Returns true if this histogram has no recorded values.
