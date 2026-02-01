@@ -13,7 +13,7 @@ cargo build                      # Build debug binary
 cargo build --release            # Build release binary
 cargo test --all-features        # Run all tests
 cargo test --all-features --doc  # Run doc tests
-cargo fmt --check                # Check formatting
+cargo +nightly fmt --check       # Check formatting (requires nightly)
 cargo clippy                     # Run linter
 ```
 
