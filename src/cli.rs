@@ -59,6 +59,7 @@ use std::{
     io::stdout,
     num::{NonZeroU8, NonZeroU32, NonZeroU64},
     path::PathBuf,
+    sync::Arc,
 };
 
 use clap::{
@@ -76,7 +77,7 @@ use crate::{
     baseline::{self, BaselineName, RegressionMetric, Verdict},
     clock::Clock,
     collector::{ReportCollector, SilentCollector, TuiCollector},
-    phase::{BenchPhase, RunState},
+    phase::{BenchPhase, PauseControl},
     reporter::{BenchReporter, JsonReporter, TextReporter},
     runner::{BenchOpts, BenchSuite, Runner},
 };
@@ -303,7 +304,7 @@ where
 
     // Now run the benchmark
     let (res_tx, res_rx) = mpsc::unbounded_channel();
-    let (run_state_tx, run_state_rx) = watch::channel(RunState::Running);
+    let pause = Arc::new(PauseControl::new());
     let cancel = CancellationToken::new();
 
     // Phase status channel for setup/warmup/running progress
@@ -317,7 +318,7 @@ where
         bench_suite,
         opts.clone(),
         res_tx,
-        run_state_rx,
+        pause.clone(),
         cancel.clone(),
         phase_tx,
     );
@@ -327,7 +328,7 @@ where
             opts,
             cli.fps,
             res_rx,
-            run_state_tx,
+            pause,
             cancel,
             !cli.quit_manually,
             phase_rx,

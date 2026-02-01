@@ -39,14 +39,14 @@ impl super::TuiCollector {
                                     clock.resume();
                                 }
                                 self.state.run_state = RunState::Running;
-                                self.run_state_tx.send_replace(self.state.run_state);
+                                self.pause.resume();
                             }
                             RunState::Running => {
                                 if is_bench_phase {
                                     clock.pause();
                                 }
                                 self.state.run_state = RunState::Paused;
-                                self.run_state_tx.send_replace(self.state.run_state);
+                                self.pause.pause();
                             }
                             RunState::Finished => {}
                         }

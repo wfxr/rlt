@@ -69,7 +69,7 @@ pub mod collector;
 pub mod reporter;
 
 pub use crate::{
-    phase::{BenchPhase, RunState},
+    phase::{BenchPhase, PauseControl, RunState},
     report::BenchReport,
     report::IterReport,
     runner::BenchOpts,
