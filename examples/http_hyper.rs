@@ -4,10 +4,9 @@ use clap::Parser;
 use http_body_util::{BodyExt, Full};
 use hyper::Uri;
 use hyper_tls::HttpsConnector;
-use hyper_util::{
-    client::legacy::{Client, connect::HttpConnector},
-    rt::TokioExecutor,
-};
+use hyper_util::client::legacy::Client;
+use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::rt::TokioExecutor;
 use rlt::{BenchResult, BenchSuite, IterInfo, IterReport, Result, bench_cli};
 use tokio::time::Instant;
 
@@ -32,7 +31,11 @@ impl BenchSuite for HttpBench {
         Ok(client)
     }
 
-    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> BenchResult<IterReport> {
+    async fn bench(
+        &mut self,
+        client: &mut Self::WorkerState,
+        _: &IterInfo,
+    ) -> BenchResult<IterReport> {
         let t = Instant::now();
         let mut resp = client.get(self.url.clone()).await?;
         let status = resp.status().into();

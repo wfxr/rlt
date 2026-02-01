@@ -3,9 +3,9 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::{report::BenchReport, util::rate};
-
 use super::Baseline;
+use crate::report::BenchReport;
+use crate::util::rate;
 
 /// Metrics that can be used for regression detection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, clap::ValueEnum, strum::Display)]
@@ -206,10 +206,18 @@ pub fn compare(
                 noise_threshold,
             ),
             p90: baseline_latency.percentiles.get("p90").map(|&v| {
-                calculate_latency_delta(report.hist.value_at_quantile(0.90).as_secs_f64(), v, noise_threshold)
+                calculate_latency_delta(
+                    report.hist.value_at_quantile(0.90).as_secs_f64(),
+                    v,
+                    noise_threshold,
+                )
             }),
             p99: baseline_latency.percentiles.get("p99").map(|&v| {
-                calculate_latency_delta(report.hist.value_at_quantile(0.99).as_secs_f64(), v, noise_threshold)
+                calculate_latency_delta(
+                    report.hist.value_at_quantile(0.99).as_secs_f64(),
+                    v,
+                    noise_threshold,
+                )
             }),
             max: calculate_latency_delta(
                 report.hist.max().as_secs_f64(),
@@ -220,11 +228,15 @@ pub fn compare(
     };
 
     // Calculate success ratio delta
-    let success_ratio =
-        calculate_success_ratio_delta(report.success_ratio(), baseline_summary.success_ratio, noise_threshold);
+    let success_ratio = calculate_success_ratio_delta(
+        report.success_ratio(),
+        baseline_summary.success_ratio,
+        noise_threshold,
+    );
 
     // Calculate verdict based on regression metrics
-    let (verdict, skipped) = calculate_verdict(&throughput, latency.as_ref(), &success_ratio, regression_metrics);
+    let (verdict, skipped) =
+        calculate_verdict(&throughput, latency.as_ref(), &success_ratio, regression_metrics);
 
     Comparison {
         baseline_name: baseline.metadata.name.clone(),
@@ -259,7 +271,12 @@ fn calculate_success_ratio_delta(current: f64, baseline: f64, noise_threshold: f
 /// Generic delta calculation.
 ///
 /// - `higher_is_better`: true for throughput metrics, false for latency metrics.
-fn calculate_delta(current: f64, baseline: f64, noise_threshold: f64, higher_is_better: bool) -> Delta {
+fn calculate_delta(
+    current: f64,
+    baseline: f64,
+    noise_threshold: f64,
+    higher_is_better: bool,
+) -> Delta {
     // Handle edge case: both zero
     if baseline == 0.0 && current == 0.0 {
         return Delta {
@@ -290,11 +307,7 @@ fn calculate_delta(current: f64, baseline: f64, noise_threshold: f64, higher_is_
                 // For throughput (higher_is_better=true): ratio > 1 means improved
                 // For latency (higher_is_better=false): ratio < 1 means improved
                 let is_improved = if higher_is_better { r > 1.0 } else { r < 1.0 };
-                if is_improved {
-                    DeltaStatus::Improved
-                } else {
-                    DeltaStatus::Regressed
-                }
+                if is_improved { DeltaStatus::Improved } else { DeltaStatus::Regressed }
             }
         }
         // baseline == 0, current != 0: throughput improved, latency regressed
@@ -413,7 +426,8 @@ mod tests {
             status: DeltaStatus::Unchanged,
         };
 
-        let (verdict, skipped) = calculate_verdict(&throughput, None, &success_ratio, &[RegressionMetric::ItersRate]);
+        let (verdict, skipped) =
+            calculate_verdict(&throughput, None, &success_ratio, &[RegressionMetric::ItersRate]);
         assert_eq!(verdict, Verdict::Improved);
         assert!(skipped.is_empty());
     }

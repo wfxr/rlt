@@ -16,13 +16,11 @@ use async_trait::async_trait;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    BenchResult, Result,
-    histogram::LatencyHistogram,
-    report::{BenchReport, IterReport},
-    runner::BenchOpts,
-    stats::IterStats,
-};
+use crate::histogram::LatencyHistogram;
+use crate::report::{BenchReport, IterReport};
+use crate::runner::BenchOpts;
+use crate::stats::IterStats;
+use crate::{BenchResult, Result};
 
 /// A silent report collector that aggregates results without terminal output.
 ///

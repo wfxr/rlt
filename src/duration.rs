@@ -77,10 +77,7 @@ impl std::fmt::Display for TimeUnit {
 
 impl std::fmt::Display for FormattedDuration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.duration
-            .as_f64(self.unit)
-            .fmt(f)
-            .and_then(|_| write!(f, "{unit}", unit = self.unit,))
+        self.duration.as_f64(self.unit).fmt(f).and_then(|_| write!(f, "{unit}", unit = self.unit,))
     }
 }
 

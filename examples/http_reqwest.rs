@@ -18,7 +18,11 @@ impl BenchSuite for HttpBench {
         Ok(Client::new())
     }
 
-    async fn bench(&mut self, client: &mut Self::WorkerState, _: &IterInfo) -> BenchResult<IterReport> {
+    async fn bench(
+        &mut self,
+        client: &mut Self::WorkerState,
+        _: &IterInfo,
+    ) -> BenchResult<IterReport> {
         let t = Instant::now();
         let resp = client.get(self.url.clone()).send().await?;
         let status = resp.status().into();

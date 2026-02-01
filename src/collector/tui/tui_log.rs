@@ -1,11 +1,8 @@
-use ratatui::{
-    Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Style},
-    widgets::Clear,
-};
-
 use log::LevelFilter;
+use ratatui::Frame;
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
+use ratatui::style::{Color, Style};
+use ratatui::widgets::Clear;
 use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget, TuiWidgetState};
 
 pub(crate) struct LogState {

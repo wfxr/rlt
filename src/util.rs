@@ -7,11 +7,7 @@
 use byte_unit::{Byte, UnitType};
 
 fn format_byte(byte: Byte, precision: usize) -> String {
-    format!(
-        "{:.prec$}",
-        byte.get_appropriate_unit(UnitType::Binary),
-        prec = precision
-    )
+    format!("{:.prec$}", byte.get_appropriate_unit(UnitType::Binary), prec = precision)
 }
 
 /// Trait for formatting a value as a human-readable byte string.
@@ -24,9 +20,7 @@ pub trait HumanBytes {
 
 impl HumanBytes for f64 {
     fn human_bytes(self, precision: usize) -> String {
-        Byte::from_f64(self)
-            .map(|b| format_byte(b, precision))
-            .unwrap_or_else(|| "N/A".to_string())
+        Byte::from_f64(self).map(|b| format_byte(b, precision)).unwrap_or_else(|| "N/A".to_string())
     }
 }
 

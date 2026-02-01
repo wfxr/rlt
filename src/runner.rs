@@ -1,17 +1,12 @@
 //! This module defines traits for stateful and stateless benchmark suites.
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::time::Duration;
+
 use async_trait::async_trait;
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicU64, AtomicUsize, Ordering},
-    },
-    time::Duration,
-};
-use tokio::{
-    select,
-    sync::{Barrier, mpsc, watch},
-    task::JoinSet,
-};
+use tokio::select;
+use tokio::sync::{Barrier, mpsc, watch};
+use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 cfg_if::cfg_if! {
@@ -22,12 +17,10 @@ cfg_if::cfg_if! {
     }
 }
 
-use crate::{
-    clock::Clock,
-    error::{BenchResult, ConfigError, Error, Result},
-    phase::{BenchPhase, PauseControl},
-    report::IterReport,
-};
+use crate::clock::Clock;
+use crate::error::{BenchResult, ConfigError, Error, Result};
+use crate::phase::{BenchPhase, PauseControl};
+use crate::report::IterReport;
 
 /// Core options for the benchmark runner.
 #[derive(Clone, Debug)]
@@ -190,7 +183,11 @@ pub trait BenchSuite: Clone {
     async fn setup(&mut self, worker_id: u32) -> BenchResult<Self::WorkerState>;
 
     /// Run a single iteration of the benchmark.
-    async fn bench(&mut self, state: &mut Self::WorkerState, info: &IterInfo) -> BenchResult<IterReport>;
+    async fn bench(
+        &mut self,
+        state: &mut Self::WorkerState,
+        info: &IterInfo,
+    ) -> BenchResult<IterReport>;
 
     /// Teardown procedure after each worker finishes.
     #[allow(unused_variables)]
@@ -217,7 +214,11 @@ where
         Ok(())
     }
 
-    async fn bench(&mut self, _: &mut Self::WorkerState, info: &IterInfo) -> BenchResult<IterReport> {
+    async fn bench(
+        &mut self,
+        _: &mut Self::WorkerState,
+        info: &IterInfo,
+    ) -> BenchResult<IterReport> {
         StatelessBenchSuite::bench(self, info).await
     }
 }
@@ -271,18 +272,14 @@ where
         cancel: CancellationToken,
         phase_tx: watch::Sender<BenchPhase>,
     ) -> Self {
-        Self {
-            suite,
-            opts,
-            res_tx,
-            pause,
-            cancel,
-            seq: Arc::default(),
-            phase_tx,
-        }
+        Self { suite, opts, res_tx, pause, cancel, seq: Arc::default(), phase_tx }
     }
 
-    async fn iteration(&mut self, state: &mut BS::WorkerState, info: &IterInfo) -> BenchResult<IterReport> {
+    async fn iteration(
+        &mut self,
+        state: &mut BS::WorkerState,
+        info: &IterInfo,
+    ) -> BenchResult<IterReport> {
         self.pause.wait_if_paused().await;
         let res = self.suite.bench(state, info).await;
 
@@ -336,19 +333,15 @@ where
             let barrier = barrier.clone();
 
             set.spawn(async move {
-                let mut state = b
-                    .suite
-                    .setup(worker)
-                    .await
-                    .map_err(|e| Error::WorkerSetup { worker_id: worker, source: e })?;
+                let mut state =
+                    b.suite.setup(worker).await.map_err(|e| Error::WorkerSetup { worker_id: worker, source: e })?;
                 let mut info = IterInfo::new(worker);
                 let cancel = b.cancel.clone();
 
                 // Report setup progress
                 let completed = setup_completed.fetch_add(1, Ordering::Relaxed) + 1;
                 // Progress display must be best-effort; never fail the benchmark if receivers are gone.
-                b.phase_tx
-                    .send_replace(BenchPhase::Setup { completed, total: workers as usize });
+                b.phase_tx.send_replace(BenchPhase::Setup { completed, total: workers as usize });
 
                 // Wait for all workers to complete setup before starting bench loop
                 barrier.wait().await;
@@ -462,13 +455,15 @@ async fn join_all(set: &mut JoinSet<Result<()>>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::env;
     use std::sync::Mutex;
     use std::sync::atomic::AtomicBool;
     use std::time::Instant;
 
-    use crate::{Status, clock::Clock, report::IterReport};
+    use super::*;
+    use crate::Status;
+    use crate::clock::Clock;
+    use crate::report::IterReport;
 
     #[test]
     fn test_bench_opts_default_values() {
@@ -534,15 +529,11 @@ mod tests {
             }
         }
 
-        let concurrency: u32 = env::var("RLT_PERF_CONCURRENCY")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(32);
+        let concurrency: u32 =
+            env::var("RLT_PERF_CONCURRENCY").ok().and_then(|s| s.parse().ok()).unwrap_or(32);
 
-        let iterations: u64 = env::var("RLT_PERF_ITERS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(20_000_000);
+        let iterations: u64 =
+            env::var("RLT_PERF_ITERS").ok().and_then(|s| s.parse().ok()).unwrap_or(20_000_000);
 
         let threads: usize = env::var("RLT_PERF_THREADS")
             .ok()
@@ -608,11 +599,7 @@ mod tests {
 
     impl TrackedSuite {
         fn new(setup_delay_ms: u64, clock: Clock) -> Self {
-            Self {
-                events: Arc::new(Mutex::new(Vec::new())),
-                setup_delay_ms,
-                clock,
-            }
+            Self { events: Arc::new(Mutex::new(Vec::new())), setup_delay_ms, clock }
         }
 
         fn record(&self, phase: Phase) {
@@ -648,11 +635,8 @@ mod tests {
         }
 
         async fn bench(&mut self, _: &mut (), _: &IterInfo) -> BenchResult<IterReport> {
-            let phase = if self.clock.elapsed() == Duration::ZERO {
-                Phase::Warmup
-            } else {
-                Phase::Bench
-            };
+            let phase =
+                if self.clock.elapsed() == Duration::ZERO { Phase::Warmup } else { Phase::Bench };
             self.record(phase);
             Ok(IterReport {
                 duration: Duration::from_micros(100),
@@ -663,7 +647,12 @@ mod tests {
         }
     }
 
-    async fn run_benchmark(suite: &TrackedSuite, concurrency: u32, warmups: u64, iterations: u64) -> Result<()> {
+    async fn run_benchmark(
+        suite: &TrackedSuite,
+        concurrency: u32,
+        warmups: u64,
+        iterations: u64,
+    ) -> Result<()> {
         let (res_tx, mut res_rx) = mpsc::unbounded_channel();
         let pause = Arc::new(PauseControl::new());
         let (phase_tx, _phase_rx) = watch::channel(BenchPhase::default());

@@ -10,7 +10,9 @@
 //! within this module.
 #![allow(missing_docs)]
 
-use std::{io, path::PathBuf, time::Duration};
+use std::io;
+use std::path::PathBuf;
+use std::time::Duration;
 
 use thiserror::Error;
 
@@ -139,7 +141,9 @@ pub enum BaselineError {
         source: io::Error,
     },
 
-    #[error("baseline is not comparable: concurrency mismatch (current={current}, baseline={baseline})")]
+    #[error(
+        "baseline is not comparable: concurrency mismatch (current={current}, baseline={baseline})"
+    )]
     ConcurrencyMismatch { current: u32, baseline: u32 },
 
     #[error("baseline is not comparable: rate limit mismatch (current={}, baseline={})",

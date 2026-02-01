@@ -3,11 +3,9 @@ use std::collections::HashMap;
 
 use tokio::time::Duration;
 
-use crate::{
-    histogram::LatencyHistogram,
-    stats::IterStats,
-    status::{Status, StatusKind},
-};
+use crate::histogram::LatencyHistogram;
+use crate::stats::IterStats;
+use crate::status::{Status, StatusKind};
 
 /// The iteration report.
 #[derive(Debug, Clone)]

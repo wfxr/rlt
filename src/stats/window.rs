@@ -14,17 +14,16 @@
 //! - [`MultiScaleStatsWindow`] - Multiple windows at different time scales.
 //! - [`RecentStatsWindow`] - Calculates rate statistics over sliding windows.
 
-use std::{collections::VecDeque, num::NonZeroUsize};
+use std::collections::VecDeque;
+use std::num::NonZeroUsize;
 
 use itertools::Itertools;
 use nonzero_ext::nonzero;
 use tokio::time::Duration;
 
-use crate::error::ConfigError;
-
-use crate::report::IterReport;
-
 use super::Counter;
+use crate::error::ConfigError;
+use crate::report::IterReport;
 
 /// A rolling window that maintains statistics in time-ordered buckets.
 ///
@@ -148,10 +147,7 @@ impl MultiScaleStatsWindow {
 
     /// Returns the window matching the requested period in seconds.
     pub fn window_for_secs(&self, secs: usize) -> Option<&StatsWindow> {
-        self.periods
-            .iter()
-            .position(|p| *p == secs)
-            .map(|idx| &self.windows[idx])
+        self.periods.iter().position(|p| *p == secs).map(|idx| &self.windows[idx])
     }
 }
 
@@ -301,7 +297,8 @@ mod tests {
 
     #[test]
     fn multi_scale_stats_window_ticks_by_periods() {
-        let mut msw = MultiScaleStatsWindow::new(nonzero!(2usize), [1usize, 10]).expect("valid periods");
+        let mut msw =
+            MultiScaleStatsWindow::new(nonzero!(2usize), [1usize, 10]).expect("valid periods");
         assert_eq!(msw.window_for_secs(10).unwrap().len(), 1);
 
         for _ in 0..9 {
@@ -316,9 +313,8 @@ mod tests {
 
     #[test]
     fn multi_scale_stats_window_rejects_zero_period() {
-        let err = MultiScaleStatsWindow::new(nonzero!(2usize), [0usize])
-            .err()
-            .expect("expected error");
+        let err =
+            MultiScaleStatsWindow::new(nonzero!(2usize), [0usize]).err().expect("expected error");
         assert_eq!(err.to_string(), "stats window period must be > 0 (got 0)");
     }
 

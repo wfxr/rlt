@@ -6,12 +6,15 @@
 mod compare;
 mod storage;
 
+use std::collections::BTreeMap;
+use std::fmt;
+use std::str::FromStr;
+
 pub use compare::{
-    Comparison, Delta, DeltaStatus, LatencyDeltas, RegressionMetric, ThroughputDeltas, Verdict, compare,
+    Comparison, Delta, DeltaStatus, LatencyDeltas, RegressionMetric, ThroughputDeltas, Verdict,
+    compare,
 };
 pub use storage::{load, load_file, resolve_baseline_dir, save};
-
-use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use crate::error::BaselineError;
 
@@ -39,14 +42,8 @@ impl FromStr for BaselineName {
         if s.is_empty() {
             return Err("baseline name cannot be empty".to_string());
         }
-        if !s
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
-        {
-            return Err(format!(
-                "invalid baseline name '{}': must contain only [a-zA-Z0-9_.-]",
-                s
-            ));
+        if !s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.') {
+            return Err(format!("invalid baseline name '{}': must contain only [a-zA-Z0-9_.-]", s));
         }
         Ok(BaselineName(s.to_string()))
     }
@@ -201,7 +198,10 @@ impl Baseline {
         {
             let current_rate = cli.rate.map(|r| r.get());
             if current_rate != config.rate_limit {
-                return Err(BaselineError::RateLimitMismatch { current: current_rate, baseline: config.rate_limit });
+                return Err(BaselineError::RateLimitMismatch {
+                    current: current_rate,
+                    baseline: config.rate_limit,
+                });
             }
         }
 

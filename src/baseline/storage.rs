@@ -1,23 +1,20 @@
 //! Baseline storage operations (load/save).
 
-use std::{
-    fs::{self, File},
-    io::{BufReader, BufWriter, Write},
-    path::{Path, PathBuf},
-};
+use std::fs::{self, File};
+use std::io::{BufReader, BufWriter, Write};
+use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 
-use crate::error::BaselineError;
-
-use crate::{cli::BenchCli, histogram::PERCENTAGES, report::BenchReport, util::rate};
-
-use super::BaselineResult;
-
 use super::{
-    Baseline, BaselineMetadata, BaselineName, BenchConfig, Latency, LatencyStats, RateSummary, SCHEMA_VERSION,
-    SerializableReport, Summary,
+    Baseline, BaselineMetadata, BaselineName, BaselineResult, BenchConfig, Latency, LatencyStats,
+    RateSummary, SCHEMA_VERSION, SerializableReport, Summary,
 };
+use crate::cli::BenchCli;
+use crate::error::BaselineError;
+use crate::histogram::PERCENTAGES;
+use crate::report::BenchReport;
+use crate::util::rate;
 
 /// Resolve the baseline directory using the priority order:
 /// 1. CLI flag (if specified)
@@ -30,7 +27,9 @@ pub fn resolve_baseline_dir(cli_dir: Option<&Path>) -> PathBuf {
     }
     std::env::var("RLT_BASELINE_DIR")
         .map(PathBuf::from)
-        .or_else(|_| std::env::var("CARGO_TARGET_DIR").map(|d| PathBuf::from(d).join("rlt/baselines")))
+        .or_else(|_| {
+            std::env::var("CARGO_TARGET_DIR").map(|d| PathBuf::from(d).join("rlt/baselines"))
+        })
         .unwrap_or_else(|_| PathBuf::from("target/rlt/baselines"))
 }
 
@@ -42,11 +41,12 @@ pub fn load(baseline_dir: &Path, name: &BaselineName) -> BaselineResult<Baseline
 
 /// Load a baseline from a file path.
 pub fn load_file(path: &Path) -> BaselineResult<Baseline> {
-    let file = File::open(path).map_err(|e| BaselineError::Open { path: path.to_path_buf(), source: e })?;
+    let file = File::open(path)
+        .map_err(|e| BaselineError::Open { path: path.to_path_buf(), source: e })?;
     let reader = BufReader::new(file);
 
-    let baseline: Baseline =
-        serde_json::from_reader(reader).map_err(|e| BaselineError::Parse { path: path.to_path_buf(), source: e })?;
+    let baseline: Baseline = serde_json::from_reader(reader)
+        .map_err(|e| BaselineError::Parse { path: path.to_path_buf(), source: e })?;
 
     #[cfg(feature = "tracing")]
     if baseline.schema_version > SCHEMA_VERSION {
@@ -62,7 +62,12 @@ pub fn load_file(path: &Path) -> BaselineResult<Baseline> {
 /// Save a benchmark report as a baseline.
 ///
 /// Uses atomic write (write-to-temp-then-rename) to prevent corruption.
-pub fn save(baseline_dir: &Path, name: &BaselineName, report: &BenchReport, cli: &BenchCli) -> BaselineResult<()> {
+pub fn save(
+    baseline_dir: &Path,
+    name: &BaselineName,
+    report: &BenchReport,
+    cli: &BenchCli,
+) -> BaselineResult<()> {
     let name = name.as_str();
 
     // Ensure directory exists
@@ -90,7 +95,11 @@ pub fn save(baseline_dir: &Path, name: &BaselineName, report: &BenchReport, cli:
     }
 
     // Atomic rename
-    fs::rename(&temp_path, &path).map_err(|e| BaselineError::Rename { from: temp_path, to: path, source: e })?;
+    fs::rename(&temp_path, &path).map_err(|e| BaselineError::Rename {
+        from: temp_path,
+        to: path,
+        source: e,
+    })?;
 
     Ok(())
 }

@@ -20,7 +20,8 @@ impl LatencyHistogram {
 
     /// Records a latency value.
     pub fn record(&mut self, d: Duration) -> std::result::Result<(), CollectorError> {
-        let nanos = u64::try_from(d.as_nanos()).map_err(|_| CollectorError::LatencyTooLarge { latency: d })?;
+        let nanos = u64::try_from(d.as_nanos())
+            .map_err(|_| CollectorError::LatencyTooLarge { latency: d })?;
         self.hist.record(nanos).map_err(CollectorError::HistogramRecord)
     }
 
@@ -65,17 +66,15 @@ impl LatencyHistogram {
     pub fn quantiles(&self) -> impl Iterator<Item = (Duration, u64)> + '_ {
         self.hist
             .iter_quantiles(1)
-            .map(|t| {
-                (
-                    Duration::from_nanos(t.value_iterated_to()),
-                    t.count_since_last_iteration(),
-                )
-            })
+            .map(|t| (Duration::from_nanos(t.value_iterated_to()), t.count_since_last_iteration()))
             .filter(|(_, n)| *n > 0)
     }
 
     /// Compute each latency value at the given percentages.
-    pub fn percentiles<'a>(&'a self, percentages: &'a [f64]) -> impl Iterator<Item = (f64, Duration)> + 'a {
+    pub fn percentiles<'a>(
+        &'a self,
+        percentages: &'a [f64],
+    ) -> impl Iterator<Item = (f64, Duration)> + 'a {
         percentages.iter().map(|&p| (p, self.value_at_quantile(p / 100.0)))
     }
 }

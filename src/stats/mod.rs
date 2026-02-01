@@ -14,12 +14,13 @@
 mod counter;
 mod window;
 
+use std::collections::HashMap;
+
 pub use counter::Counter;
 pub use window::{MultiScaleStatsWindow, RecentStatsWindow};
 
-use std::collections::HashMap;
-
-use crate::{report::IterReport, status::Status};
+use crate::report::IterReport;
+use crate::status::Status;
 
 /// Aggregated statistics for benchmark iterations.
 ///

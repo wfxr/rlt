@@ -19,14 +19,16 @@
 //! - Integration with monitoring systems
 //! - Historical performance tracking
 
-use crate::{baseline::Comparison, histogram::PERCENTAGES, report::BenchReport, util::rate};
-
-use super::BenchReporter;
+use std::collections::BTreeMap;
+use std::io::Write;
 
 use serde::Serialize;
 
-use super::ReporterResult;
-use std::{collections::BTreeMap, io::Write};
+use super::{BenchReporter, ReporterResult};
+use crate::baseline::Comparison;
+use crate::histogram::PERCENTAGES;
+use crate::report::BenchReport;
+use crate::util::rate;
 
 /// A JSON reporter that outputs machine-readable benchmark results.
 ///
@@ -46,7 +48,12 @@ use std::{collections::BTreeMap, io::Write};
 pub struct JsonReporter;
 
 impl BenchReporter for JsonReporter {
-    fn print(&self, w: &mut dyn Write, report: &BenchReport, comparison: Option<&Comparison>) -> ReporterResult<()> {
+    fn print(
+        &self,
+        w: &mut dyn Write,
+        report: &BenchReport,
+        comparison: Option<&Comparison>,
+    ) -> ReporterResult<()> {
         let elapsed = report.elapsed.as_secs_f64();
         let overall = &report.stats.overall;
         let summary = Summary {
