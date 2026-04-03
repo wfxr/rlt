@@ -15,10 +15,3 @@ body:
     attributes:
       label: Proposed Solution (optional)
       description: If you have ideas on how to implement this, share them here.
-
-  - type: checkboxes
-    id: contribution
-    attributes:
-      label: Contribution
-      options:
-        - label: I would be willing to submit a PR for this feature
