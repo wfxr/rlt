@@ -36,7 +36,6 @@ rlt = "0.3"
 For simple benchmarks without per-worker state, implement the `StatelessBenchSuite` trait:
 
 ```rust
-use async_trait::async_trait;
 use clap::Parser;
 use rlt::{cli::BenchCli, BenchResult, IterInfo, IterReport, StatelessBenchSuite, Status};
 use tokio::time::Instant;
@@ -44,7 +43,6 @@ use tokio::time::Instant;
 #[derive(Clone)]
 struct SimpleBench;
 
-#[async_trait]
 impl StatelessBenchSuite for SimpleBench {
     async fn bench(&mut self, _: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();
@@ -71,7 +69,6 @@ bench_cli!(HttpBench, {
     pub url: Url,
 });
 
-#[async_trait]
 impl BenchSuite for HttpBench {
     type WorkerState = Client;
 

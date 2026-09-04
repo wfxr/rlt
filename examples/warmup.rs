@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use async_trait::async_trait;
 use clap::Parser;
 use rlt::cli::BenchCli;
 use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status};
@@ -33,7 +32,6 @@ struct SimpleBench {
 
 const WARMUP_ITERS: u64 = 10;
 
-#[async_trait]
 impl StatelessBenchSuite for SimpleBench {
     async fn bench(&mut self, info: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();

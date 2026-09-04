@@ -182,13 +182,13 @@ impl Baseline {
     /// Validate that this baseline is comparable with the given CLI settings.
     ///
     /// This should be called **before** running the benchmark to fail fast on incompatible baselines.
-    pub fn validate(&self, cli: &crate::cli::BenchCli) -> BaselineResult<()> {
+    pub fn validate(&self, opts: &crate::BenchOpts) -> BaselineResult<()> {
         let config = &self.metadata.bench_config;
 
         // Concurrency mismatch is an error - results would not be comparable
-        if cli.concurrency.get() != config.concurrency {
+        if opts.concurrency != config.concurrency {
             return Err(BaselineError::ConcurrencyMismatch {
-                current: cli.concurrency.get(),
+                current: opts.concurrency,
                 baseline: config.concurrency,
             });
         }
@@ -196,7 +196,7 @@ impl Baseline {
         // Rate limit mismatch is an error - directly affects throughput
         #[cfg(feature = "rate_limit")]
         {
-            let current_rate = cli.rate.map(|r| r.get());
+            let current_rate = opts.rate.map(|r| r.get());
             if current_rate != config.rate_limit {
                 return Err(BaselineError::RateLimitMismatch {
                     current: current_rate,

@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use clap::Parser;
 use reqwest::{Client, Url};
 use rlt::{BenchResult, BenchSuite, IterInfo, IterReport, Result, bench_cli, bench_cli_run};
@@ -10,7 +9,6 @@ bench_cli!(HttpBench, {
     pub url: Url,
 });
 
-#[async_trait]
 impl BenchSuite for HttpBench {
     type WorkerState = Client;
 

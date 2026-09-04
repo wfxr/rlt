@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use bytes::Bytes;
 use clap::Parser;
 use http_body_util::{BodyExt, Full};
@@ -21,7 +20,6 @@ struct HttpBench {
     url: Uri,
 }
 
-#[async_trait]
 impl BenchSuite for HttpBench {
     type WorkerState = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;
 

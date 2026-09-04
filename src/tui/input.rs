@@ -7,7 +7,7 @@ use super::state::TimeWindowMode;
 use crate::error::TuiError;
 use crate::phase::{BenchPhase, RunState};
 
-impl super::TuiCollector {
+impl super::Tui {
     /// Handle the user input events. Returns `true` if the collector should quit.
     pub(super) async fn handle_event(&mut self, elapsed: Duration) -> TuiResult<bool> {
         let clock = &mut self.bench_opts.clock;

@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use clap::Parser;
 use rlt::{
     BenchResult, BenchSuite, IterInfo, IterReport, Result, Status, bench_cli, bench_cli_run,
@@ -32,7 +31,6 @@ bench_cli!(DBBench, {
     pub table: String,
 });
 
-#[async_trait]
 impl BenchSuite for DBBench {
     type WorkerState = Client;
 

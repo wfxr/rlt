@@ -58,22 +58,20 @@ use std::fs::File;
 use std::io::stdout;
 use std::num::{NonZeroU8, NonZeroU32, NonZeroU64};
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects};
 use clap::{ArgGroup, Parser, ValueEnum};
 use crossterm::tty::IsTty;
-use tokio::sync::{mpsc, watch};
-use tokio_util::sync::CancellationToken;
 
+use crate::BenchSuite;
 use crate::baseline::{self, BaselineName, RegressionMetric, Verdict};
 use crate::clock::Clock;
-use crate::collector::{ReportCollector, SilentCollector, TuiCollector};
 use crate::error::ReporterError;
-use crate::phase::{BenchPhase, PauseControl};
 use crate::reporter::{BenchReporter, JsonReporter, TextReporter};
-use crate::runner::{BenchOpts, BenchSuite, Runner};
+use crate::runner::BenchOpts;
+use crate::session::BenchSession;
+use crate::tui::TuiSettings;
 
 /// Default regression metrics for baseline comparison.
 const DEFAULT_REGRESSION_METRICS: &[RegressionMetric] = &[
@@ -255,11 +253,13 @@ pub enum ReportFormat {
 }
 
 /// Run the benchmark with the given CLI options and benchmark suite.
-pub async fn run<BS>(cli: BenchCli, bench_suite: BS) -> crate::Result<()>
+pub async fn run<BS>(cli: BenchCli, suite: BS) -> crate::Result<()>
 where
-    BS: BenchSuite + Send + 'static,
+    BS: BenchSuite + Clone + Send + 'static,
     BS::WorkerState: Send + 'static,
 {
+    let opts = cli.bench_opts(Clock::new_paused());
+
     // Resolve baseline directory
     let baseline_dir = baseline::resolve_baseline_dir(cli.baseline_dir.as_deref());
 
@@ -269,41 +269,14 @@ where
         (None, Some(path)) => Some(baseline::load_file(path)?),
         (None, None) => None,
     };
-    baseline.as_ref().map(|b| b.validate(&cli)).transpose()?;
+    baseline.as_ref().map(|b| b.validate(&opts)).transpose()?;
 
-    // Now run the benchmark
-    let (res_tx, res_rx) = mpsc::unbounded_channel();
-    let pause = Arc::new(PauseControl::new());
-    let cancel = CancellationToken::new();
-
-    // Phase status channel for setup/warmup/running progress
-    let (phase_tx, phase_rx) =
-        watch::channel(BenchPhase::Setup { completed: 0, total: cli.concurrency.get() as usize });
-
-    // Create the clock in paused state - it will be resumed after all workers
-    // complete setup and warmup, ensuring accurate timing for the main benchmark.
-    let opts = cli.bench_opts(Clock::new_paused());
-    let runner =
-        Runner::new(bench_suite, opts.clone(), res_tx, pause.clone(), cancel.clone(), phase_tx);
-
-    let mut collector: Box<dyn ReportCollector> = match cli.collector() {
-        Collector::Tui => Box::new(TuiCollector::new(
-            opts,
-            cli.fps,
-            res_rx,
-            pause,
-            cancel,
-            !cli.quit_manually,
-            phase_rx,
-        )?),
-        Collector::Silent => Box::new(SilentCollector::new(opts, res_rx, cancel)),
-    };
-
-    let report = tokio::spawn(async move { collector.run().await });
-
-    runner.run().await?;
-
-    let report = report.await??;
+    let session = BenchSession::new(suite).opts(opts);
+    let report = if cli.quiet || !stdout().is_tty() {
+        session.run().await
+    } else {
+        session.with_tui(TuiSettings { fps: cli.fps, auto_quit: !cli.quit_manually }).run().await
+    }?;
 
     // Compute comparison using pre-loaded baseline
     let cmp = baseline

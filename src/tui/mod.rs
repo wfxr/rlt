@@ -34,27 +34,41 @@ use std::num::NonZeroU8;
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
+use futures::channel::mpsc;
 use nonzero_ext::nonzero;
 use state::{TimeWindow, TimeWindowMode, TuiCollectorState};
 use terminal::Terminal;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::watch;
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 
-use crate::collector::ReportCollector;
+use crate::Error;
 use crate::error::TuiError;
 use crate::histogram::LatencyHistogram;
 use crate::phase::{BenchPhase, PauseControl, RunState};
-use crate::report::{BenchReport, IterReport};
+use crate::report::IterReport;
 use crate::runner::BenchOpts;
 use crate::stats::{IterStats, MultiScaleStatsWindow, RecentStatsWindow};
-use crate::status::Status;
-use crate::{BenchResult, Result};
 
 type TuiResult<T> = std::result::Result<T, TuiError>;
 
 const SECOND: Duration = Duration::from_secs(1);
+
+/// Settings for Tui
+#[derive(Debug, Clone)]
+pub struct TuiSettings {
+    /// Refresh rate for the tui collector, in frames per second (fps)
+    pub fps: NonZeroU8,
+
+    /// Quit automatically once bench is done
+    pub auto_quit: bool,
+}
+
+impl Default for TuiSettings {
+    fn default() -> Self {
+        Self { fps: unsafe { NonZeroU8::new_unchecked(32) }, auto_quit: true }
+    }
+}
 
 /// A report collector with real-time terminal user interface (TUI) support.
 ///
@@ -73,13 +87,13 @@ const SECOND: Duration = Duration::from_secs(1);
 /// - **Iteration histogram**: Bar chart of iterations per time bucket
 /// - **Latency histogram**: Distribution of response latencies with percentiles
 /// - **Progress**: Progress bar showing completion status
-pub struct TuiCollector {
+pub(crate) struct Tui {
     /// The benchmark options (duration, iterations, concurrency, etc.).
     pub(crate) bench_opts: BenchOpts,
     /// Refresh rate in frames per second (fps).
     pub(crate) fps: NonZeroU8,
     /// Channel receiver for iteration reports from workers.
-    pub(crate) res_rx: mpsc::UnboundedReceiver<BenchResult<IterReport>>,
+    pub(crate) res_rx: mpsc::UnboundedReceiver<Result<IterReport, String>>,
     /// Pause control shared with the runner.
     pub(crate) pause: Arc<PauseControl>,
     /// Cancellation token for graceful shutdown.
@@ -93,12 +107,12 @@ pub struct TuiCollector {
     state: TuiCollectorState,
 }
 
-impl TuiCollector {
+impl Tui {
     /// Create a new TUI report collector.
     pub fn new(
         bench_opts: BenchOpts,
         fps: NonZeroU8,
-        res_rx: mpsc::UnboundedReceiver<BenchResult<IterReport>>,
+        res_rx: mpsc::UnboundedReceiver<Result<IterReport, String>>,
         pause: Arc<PauseControl>,
         cancel: CancellationToken,
         auto_quit: bool,
@@ -114,30 +128,13 @@ impl TuiCollector {
     }
 }
 
-#[async_trait]
-impl ReportCollector for TuiCollector {
-    async fn run(&mut self) -> Result<BenchReport> {
+impl Tui {
+    pub async fn run(mut self) -> Result<(), Error> {
         let mut hist = LatencyHistogram::new();
         let mut stats = IterStats::new();
         let mut status_dist = HashMap::new();
         let mut error_dist = HashMap::new();
 
-        self.collect(&mut hist, &mut stats, &mut status_dist, &mut error_dist).await?;
-
-        let elapsed = self.bench_opts.clock.elapsed();
-        let concurrency = self.bench_opts.concurrency;
-        Ok(BenchReport { concurrency, hist, stats, status_dist, error_dist, elapsed })
-    }
-}
-
-impl TuiCollector {
-    async fn collect(
-        &mut self,
-        hist: &mut LatencyHistogram,
-        stats: &mut IterStats,
-        status_dist: &mut HashMap<Status, u64>,
-        error_dist: &mut HashMap<String, u64>,
-    ) -> Result<()> {
         let clock = self.bench_opts.clock.clone();
         let mut terminal = Terminal::new()?;
 
@@ -171,14 +168,14 @@ impl TuiCollector {
                             continue;
                         }
                         r = self.res_rx.recv() => match r {
-                            Some(Ok(report)) => {
+                            Ok(Ok(report)) => {
                                 *status_dist.entry(report.status).or_default() += 1;
                                 hist.record(report.duration)?;
                                 latest_iters.push(&report);
                                 stats.record(&report);
                             }
-                            Some(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
-                            None => {
+                            Ok(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
+                            Err(_) => {
                                 clock.pause();
                                 self.state.run_state = RunState::Finished;
                                 break;
@@ -204,10 +201,10 @@ impl TuiCollector {
                     self.state.run_state,
                     &recent_stats,
                     tw,
-                    status_dist,
-                    error_dist,
+                    &status_dist,
+                    &error_dist,
                     &latest_iters,
-                    hist,
+                    &hist,
                     &phase,
                 );
 

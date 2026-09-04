@@ -8,6 +8,7 @@ use crate::error::CollectorError;
 pub(crate) const PERCENTAGES: &[f64] = &[10.0, 25.0, 50.0, 75.0, 90.0, 95.0, 99.0, 99.9, 99.99];
 
 /// A simple wrapper around [`hdrhistogram::Histogram`] for latency measurements.
+#[derive(Debug, Clone)]
 pub struct LatencyHistogram {
     hist: Histogram<u64>,
 }

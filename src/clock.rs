@@ -72,7 +72,7 @@ pub(crate) enum Status {
 
 impl Clock {
     fn new(status: Status) -> Self {
-        let inner = InnerClock { status, elapsed: Duration::default() };
+        let inner = InnerClock { status, elapsed: Duration::ZERO };
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "rate_limit")] {

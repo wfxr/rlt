@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use tokio::time::Duration;
 
+use crate::BenchOpts;
 use crate::histogram::LatencyHistogram;
 use crate::stats::IterStats;
 use crate::status::{Status, StatusKind};
@@ -21,6 +22,7 @@ pub struct IterReport {
 }
 
 /// The final benchmark report.
+#[derive(Debug, Clone)]
 pub struct BenchReport {
     /// Number of workers to run concurrently
     pub concurrency: u32,
@@ -34,6 +36,19 @@ pub struct BenchReport {
     pub error_dist: HashMap<String, u64>,
     /// The total elapsed time of the benchmark.
     pub elapsed: Duration,
+}
+
+impl From<BenchOpts> for BenchReport {
+    fn from(opts: BenchOpts) -> Self {
+        Self {
+            concurrency: opts.concurrency,
+            hist: LatencyHistogram::default(),
+            stats: IterStats::default(),
+            status_dist: HashMap::default(),
+            error_dist: HashMap::default(),
+            elapsed: Duration::ZERO,
+        }
+    }
 }
 
 impl BenchReport {

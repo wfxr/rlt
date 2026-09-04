@@ -22,7 +22,6 @@
 
 use std::time::Duration;
 
-use async_trait::async_trait;
 use clap::Parser;
 use rlt::cli::BenchCli;
 use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status};
@@ -46,7 +45,6 @@ struct BaselineDemo {
     base_latency: Duration,
 }
 
-#[async_trait]
 impl StatelessBenchSuite for BaselineDemo {
     async fn bench(&mut self, info: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();

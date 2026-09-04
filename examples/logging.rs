@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use clap::Parser;
 use rlt::cli::BenchCli;
 use rlt::{BenchResult, IterInfo, IterReport, Result, StatelessBenchSuite, Status, StatusKind};
@@ -10,7 +9,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 #[derive(Clone)]
 struct SimpleBench;
 
-#[async_trait]
 impl StatelessBenchSuite for SimpleBench {
     async fn bench(&mut self, info: &IterInfo) -> BenchResult<IterReport> {
         let t = Instant::now();

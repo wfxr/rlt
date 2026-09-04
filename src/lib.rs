@@ -17,7 +17,6 @@
 //! A simple example of a stateless bench suite:
 //!
 //! ```no_run
-//! use async_trait::async_trait;
 //! use clap::Parser;
 //! use rlt::{cli::BenchCli, BenchResult, IterInfo, IterReport, StatelessBenchSuite, Status};
 //! use tokio::time::Instant;
@@ -25,7 +24,6 @@
 //! #[derive(Clone)]
 //! struct SimpleBench;
 //!
-//! #[async_trait]
 //! impl StatelessBenchSuite for SimpleBench {
 //!     async fn bench(&mut self, _: &IterInfo) -> BenchResult<IterReport> {
 //!         let t = Instant::now();
@@ -51,13 +49,13 @@
 //! Stateful bench is also supported, see the [examples/http_reqwest](https://github.com/wfxr/rlt/blob/main/examples/http_reqwest.rs).
 #![deny(missing_docs)]
 
+mod aggregator;
 pub mod clock;
 mod duration;
 pub mod error;
 mod histogram;
 mod phase;
 mod report;
-mod runner;
 mod status;
 mod util;
 
@@ -65,8 +63,12 @@ pub(crate) mod stats;
 
 pub mod baseline;
 pub mod cli;
-pub mod collector;
+pub mod observer;
 pub mod reporter;
+pub mod runner;
+pub mod session;
+pub mod suite;
+pub mod tui;
 
 #[cfg(feature = "tracing")]
 pub use tui_logger::TuiTracingSubscriberLayer;
@@ -74,5 +76,6 @@ pub use tui_logger::TuiTracingSubscriberLayer;
 pub use crate::error::{BenchError, BenchResult, Error, Result};
 pub use crate::phase::{BenchPhase, PauseControl, RunState};
 pub use crate::report::{BenchReport, IterReport};
-pub use crate::runner::{BenchOpts, BenchOptsBuilder, BenchSuite, IterInfo, StatelessBenchSuite};
+pub use crate::runner::{BenchOpts, BenchOptsBuilder, IterInfo};
 pub use crate::status::{Status, StatusKind};
+pub use crate::suite::{BenchSuite, StatelessBenchSuite};

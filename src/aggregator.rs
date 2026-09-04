@@ -12,15 +12,14 @@
 
 use std::collections::HashMap;
 
-use async_trait::async_trait;
-use tokio::sync::mpsc::UnboundedReceiver;
+use futures::channel::mpsc;
 use tokio_util::sync::CancellationToken;
 
+use crate::Error;
 use crate::histogram::LatencyHistogram;
 use crate::report::{BenchReport, IterReport};
 use crate::runner::BenchOpts;
 use crate::stats::IterStats;
-use crate::{BenchResult, Result};
 
 /// A silent report collector that aggregates results without terminal output.
 ///
@@ -29,26 +28,25 @@ use crate::{BenchResult, Result};
 /// produces the same [`BenchReport`](crate::BenchReport) as [`TuiCollector`](super::TuiCollector).
 ///
 /// The collector responds to `Ctrl+C` for graceful cancellation.
-pub struct SilentCollector {
+pub(crate) struct Aggregator {
     bench_opts: BenchOpts,
-    res_rx: UnboundedReceiver<BenchResult<IterReport>>,
+    res_rx: mpsc::UnboundedReceiver<Result<IterReport, String>>,
     cancel: CancellationToken,
 }
 
-impl SilentCollector {
+impl Aggregator {
     /// Create a new silent report collector.
     pub fn new(
         bench_opts: BenchOpts,
-        res_rx: UnboundedReceiver<BenchResult<IterReport>>,
+        res_rx: mpsc::UnboundedReceiver<Result<IterReport, String>>,
         cancel: CancellationToken,
     ) -> Self {
         Self { bench_opts, res_rx, cancel }
     }
 }
 
-#[async_trait]
-impl super::ReportCollector for SilentCollector {
-    async fn run(&mut self) -> Result<BenchReport> {
+impl Aggregator {
+    pub async fn run(mut self) -> Result<BenchReport, Error> {
         let mut hist = LatencyHistogram::new();
         let mut stats = IterStats::new();
         let mut status_dist = HashMap::default();
@@ -59,13 +57,13 @@ impl super::ReportCollector for SilentCollector {
                 biased;
                 _ = tokio::signal::ctrl_c() => self.cancel.cancel(),
                 r = self.res_rx.recv() => match r {
-                    Some(Ok(report)) => {
+                    Ok(Ok(report)) => {
                         *status_dist.entry(report.status).or_default() += 1;
                         hist.record(report.duration)?;
                         stats.record(&report);
                     }
-                    Some(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
-                    None => break,
+                    Ok(Err(e)) => *error_dist.entry(e.to_string()).or_default() += 1,
+                    Err(_) => break,
                 },
             }
         }

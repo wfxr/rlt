@@ -3,9 +3,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use async_trait::async_trait;
 use tokio::select;
-use tokio::sync::{Barrier, mpsc, watch};
+use tokio::sync::{Barrier, watch};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -19,8 +18,10 @@ cfg_if::cfg_if! {
 
 use crate::clock::Clock;
 use crate::error::{BenchResult, ConfigError, Error, Result};
+use crate::observer::Observer;
 use crate::phase::{BenchPhase, PauseControl};
 use crate::report::IterReport;
+use crate::suite::BenchSuite;
 
 /// Core options for the benchmark runner.
 #[derive(Clone, Debug)]
@@ -172,66 +173,12 @@ impl BenchOptsBuilder {
     }
 }
 
-/// A trait for benchmark suites.
-#[async_trait]
-pub trait BenchSuite: Clone {
-    /// The state for each worker during the benchmark.
-    type WorkerState: Send;
-
-    /// Setup procedure before each worker starts.
-    /// Initialize and return the worker state (e.g., HTTP client, DB connection).
-    async fn setup(&mut self, worker_id: u32) -> BenchResult<Self::WorkerState>;
-
-    /// Run a single iteration of the benchmark.
-    async fn bench(
-        &mut self,
-        state: &mut Self::WorkerState,
-        info: &IterInfo,
-    ) -> BenchResult<IterReport>;
-
-    /// Teardown procedure after each worker finishes.
-    #[allow(unused_variables)]
-    async fn teardown(self, state: Self::WorkerState, info: IterInfo) -> BenchResult<()> {
-        Ok(())
-    }
-}
-
-/// A trait for stateless benchmark suites.
-#[async_trait]
-pub trait StatelessBenchSuite {
-    /// Run a single iteration of the benchmark.
-    async fn bench(&mut self, info: &IterInfo) -> BenchResult<IterReport>;
-}
-
-#[async_trait]
-impl<T> BenchSuite for T
-where
-    T: StatelessBenchSuite + Clone + Send + Sync + 'static,
-{
-    type WorkerState = ();
-
-    async fn setup(&mut self, _worker_id: u32) -> BenchResult<()> {
-        Ok(())
-    }
-
-    async fn bench(
-        &mut self,
-        _: &mut Self::WorkerState,
-        info: &IterInfo,
-    ) -> BenchResult<IterReport> {
-        StatelessBenchSuite::bench(self, info).await
-    }
-}
-
 /// A Benchmark runner with a given benchmark suite and control options.
 #[derive(Clone)]
-pub(crate) struct Runner<BS>
-where
-    BS: BenchSuite,
-{
+pub(crate) struct Runner<BS, O> {
     suite: BS,
     opts: BenchOpts,
-    res_tx: mpsc::UnboundedSender<BenchResult<IterReport>>,
+    observer: O,
     pause: Arc<PauseControl>,
     cancel: CancellationToken,
     seq: Arc<AtomicU64>,
@@ -258,21 +205,22 @@ impl IterInfo {
     }
 }
 
-impl<BS> Runner<BS>
+impl<BS, O> Runner<BS, O>
 where
-    BS: BenchSuite + Send + 'static,
+    BS: BenchSuite + Clone + Send + 'static,
     BS::WorkerState: Send + 'static,
+    O: Observer + Clone + Send + 'static,
 {
     /// Create a new benchmark runner with the given benchmark suite and options.
     pub fn new(
         suite: BS,
         opts: BenchOpts,
-        res_tx: mpsc::UnboundedSender<BenchResult<IterReport>>,
+        observer: O,
         pause: Arc<PauseControl>,
         cancel: CancellationToken,
         phase_tx: watch::Sender<BenchPhase>,
     ) -> Self {
-        Self { suite, opts, res_tx, pause, cancel, seq: Arc::default(), phase_tx }
+        Self { suite, opts, observer, pause, cancel, seq: Arc::default(), phase_tx }
     }
 
     async fn iteration(
@@ -414,7 +362,7 @@ where
                         _ = cancel.cancelled() => break,
                         res = b.iteration(&mut state, &info) => {
                             // safe to ignore the error which means the receiver is dropped
-                            let _ = b.res_tx.send(res);
+                            let _ = b.observer.notify(res.as_ref()).await;
                         },
                     }
                     info.worker_seq += 1;
@@ -456,14 +404,24 @@ async fn join_all(set: &mut JoinSet<Result<()>>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use std::env;
-    use std::sync::Mutex;
-    use std::sync::atomic::AtomicBool;
-    use std::time::Instant;
+    #[cfg(feature = "rate_limit")]
+    use std::num::NonZeroU32;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
 
-    use super::*;
-    use crate::Status;
+    use futures::channel::mpsc;
+    use tokio::sync::watch;
+    use tokio_util::sync::CancellationToken;
+
+    use super::Runner;
     use crate::clock::Clock;
+    use crate::observer::MpscObserver;
     use crate::report::IterReport;
+    use crate::{
+        BenchOpts, BenchPhase, BenchResult, BenchSuite, IterInfo, PauseControl,
+        StatelessBenchSuite, Status,
+    };
 
     #[test]
     fn test_bench_opts_default_values() {
@@ -517,7 +475,6 @@ mod tests {
         #[derive(Clone)]
         struct EmptyBench;
 
-        #[async_trait]
         impl StatelessBenchSuite for EmptyBench {
             async fn bench(&mut self, _: &IterInfo) -> BenchResult<IterReport> {
                 Ok(IterReport {
@@ -547,7 +504,7 @@ mod tests {
             .unwrap();
 
         rt.block_on(async move {
-            let (res_tx, res_rx) = mpsc::unbounded_channel::<BenchResult<IterReport>>();
+            let (res_tx, res_rx) = mpsc::unbounded();
             drop(res_rx);
 
             let pause = Arc::new(PauseControl::new());
@@ -563,7 +520,7 @@ mod tests {
                 .build()
                 .unwrap();
 
-            let runner = Runner::new(EmptyBench, opts, res_tx, pause, cancel, phase_tx);
+            let runner = Runner::new(EmptyBench, opts, MpscObserver::from(res_tx), pause, cancel, phase_tx);
 
             let t0 = Instant::now();
             runner.run().await.unwrap();
@@ -622,7 +579,6 @@ mod tests {
         }
     }
 
-    #[async_trait]
     impl BenchSuite for TrackedSuite {
         type WorkerState = ();
 
@@ -652,8 +608,8 @@ mod tests {
         concurrency: u32,
         warmups: u64,
         iterations: u64,
-    ) -> Result<()> {
-        let (res_tx, mut res_rx) = mpsc::unbounded_channel();
+    ) -> crate::Result<()> {
+        let (res_tx, mut res_rx) = mpsc::unbounded();
         let pause = Arc::new(PauseControl::new());
         let (phase_tx, _phase_rx) = watch::channel(BenchPhase::default());
         let cancel = CancellationToken::new();
@@ -665,8 +621,9 @@ mod tests {
             .warmups(warmups)
             .build()?;
 
-        let runner = Runner::new(suite.clone(), opts, res_tx, pause, cancel, phase_tx);
-        let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
+        let runner =
+            Runner::new(suite.clone(), opts, MpscObserver::from(res_tx), pause, cancel, phase_tx);
+        let drain = tokio::spawn(async move { while res_rx.recv().await.is_ok() {} });
 
         runner.run().await?;
         drop(drain);
@@ -730,7 +687,7 @@ mod tests {
     #[tokio::test]
     async fn test_phase_updates_are_best_effort_when_receiver_is_dropped() {
         let suite = TrackedSuite::new(0, Clock::new_paused());
-        let (res_tx, mut res_rx) = mpsc::unbounded_channel();
+        let (res_tx, mut res_rx) = mpsc::unbounded();
         let pause = Arc::new(PauseControl::new());
         let (phase_tx, phase_rx) = watch::channel(BenchPhase::default());
         drop(phase_rx);
@@ -744,8 +701,9 @@ mod tests {
             .build()
             .unwrap();
 
-        let runner = Runner::new(suite.clone(), opts, res_tx, pause, cancel, phase_tx);
-        let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
+        let runner =
+            Runner::new(suite.clone(), opts, MpscObserver::from(res_tx), pause, cancel, phase_tx);
+        let drain = tokio::spawn(async move { while res_rx.recv().await.is_ok() {} });
 
         runner.run().await.unwrap();
         drop(drain);
@@ -760,7 +718,6 @@ mod tests {
         delay: Duration,
     }
 
-    #[async_trait]
     impl BenchSuite for PauseAtBenchSuite {
         type WorkerState = ();
 
@@ -799,7 +756,7 @@ mod tests {
             delay: Duration::from_millis(50),
         };
 
-        let (res_tx, mut res_rx) = mpsc::unbounded_channel();
+        let (res_tx, mut res_rx) = mpsc::unbounded();
         let pause = Arc::new(PauseControl::new());
         let (phase_tx, mut phase_rx) = watch::channel(BenchPhase::default());
         let cancel = CancellationToken::new();
@@ -812,8 +769,9 @@ mod tests {
             .build()
             .unwrap();
 
-        let runner = Runner::new(suite, opts, res_tx, pause.clone(), cancel, phase_tx);
-        let drain = tokio::spawn(async move { while res_rx.recv().await.is_some() {} });
+        let runner =
+            Runner::new(suite, opts, MpscObserver::from(res_tx), pause.clone(), cancel, phase_tx);
+        let drain = tokio::spawn(async move { while res_rx.recv().await.is_ok() {} });
         let handle = tokio::spawn(async move { runner.run().await });
 
         // Pause while the last warmup iteration is still running, so the transition to Bench happens under Paused.
