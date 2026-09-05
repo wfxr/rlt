@@ -1,0 +1,51 @@
+# Configuration file for `prek`, a git hook framework written in Rust.
+# See https://prek.j178.dev for more information.
+#:schema https://www.schemastore.org/prek.json
+
+default_install_hook_types = ["pre-commit", "commit-msg"]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+    { id = "trailing-whitespace" },
+    { id = "check-yaml" },
+    { id = "check-added-large-files" },
+    { id = "mixed-line-ending" },
+    { id = "check-toml" },
+]
+
+[[repos]]
+repo = "https://github.com/jorisroovers/gitlint"
+rev = "v0.19.1"
+hooks = [{ id = "gitlint" }]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "cargo-fmt"
+name = "cargo fmt"
+pass_filenames = false
+always_run = true
+stages = ["pre-commit"]
+language = "system"
+entry = "cargo +nightly fmt --check"
+
+[[repos.hooks]]
+id = "cargo-check"
+name = "cargo check"
+pass_filenames = false
+always_run = true
+stages = ["pre-commit"]
+language = "system"
+entry = "cargo check"
+
+[[repos.hooks]]
+id = "cargo-clippy"
+name = "cargo clippy"
+pass_filenames = false
+always_run = true
+stages = ["pre-commit"]
+language = "system"
+entry = "cargo clippy"
+args = ["--", "-D", "warnings"]

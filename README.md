@@ -208,6 +208,23 @@ mybench --baseline main --fail-on-regression \
 mybench --baseline v1 --save-baseline v2
 ```
 
+### Development
+
+Install [prek](https://prek.j178.dev/installation/) and enable the Git hooks in your clone:
+
+```bash
+rustup toolchain install nightly --component rustfmt
+prek install
+```
+
+The pre-commit hooks check whitespace, YAML, TOML, large files, line endings, Rust formatting, compilation, and Clippy warnings. Formatting uses nightly to match CI. The commit-msg hook checks commit messages with gitlint, which requires a body separated from the title by a blank line.
+
+Run the pre-commit checks across all tracked files at any time:
+
+```bash
+prek run --all-files
+```
+
 ### Credits
 
 The TUI layout in rlt is inspired by [oha](https://github.com/hatoo/oha).
